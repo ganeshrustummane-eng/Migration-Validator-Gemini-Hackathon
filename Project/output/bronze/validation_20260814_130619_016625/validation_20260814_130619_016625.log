@@ -1,0 +1,41 @@
+2026-08-14 13:06:19,019 | INFO | __main__ | utility.py:185 | Log file location: C:\Users\ArunsaikiranS\Desktop\SQL comparision\Frame_work\Project\output\bronze\validation_20260814_130619_016625\validation_20260814_130619_016625.log
+2026-08-14 13:06:19,020 | INFO | __main__ | main.py:84 | Start Time: 2026-08-14 13:06:19
+2026-08-14 13:06:19,020 | INFO | __main__ | main.py:85 | File logging initialized
+2026-08-14 13:06:19,020 | INFO | __main__ | main.py:88 | Validation job started
+2026-08-14 13:06:19,021 | INFO | __main__ | main.py:89 | Run ID: 20260814_130619_016625
+2026-08-14 13:06:19,021 | INFO | __main__ | main.py:91 | Input parameters - layer=bronze, tables=['general_ledger_line_items'], count_validation=no, data_validation=yes
+2026-08-14 13:06:19,022 | DEBUG | __main__ | main.py:99 | Validation directories: ['data_validation']
+2026-08-14 13:06:19,022 | INFO | __main__ | main.py:108 | Processing validation type: data_validation
+2026-08-14 13:06:19,022 | DEBUG | __main__ | main.py:109 | Output path: C:\Users\ArunsaikiranS\Desktop\SQL comparision\Frame_work\Project\output\bronze\validation_20260814_130619_016625\data_validation_20260814_130619_016625
+2026-08-14 13:06:19,022 | DEBUG | __main__ | main.py:110 | Config path: ['C:\\Users\\ArunsaikiranS\\Desktop\\SQL comparision\\Frame_work\\Project\\config\\bronze\\data_validation\\general_ledger_line_items.yaml']
+2026-08-14 13:06:19,025 | INFO | __main__ | main.py:115 | Loaded configuration: ['C:\\Users\\ArunsaikiranS\\Desktop\\SQL comparision\\Frame_work\\Project\\config\\bronze\\data_validation\\general_ledger_line_items.yaml']
+2026-08-14 13:06:19,026 | INFO | __main__ | main.py:125 | Processing table: general_ledger_line_items
+2026-08-14 13:06:19,026 | DEBUG | __main__ | main.py:127 | Validation configuration: data_validation
+2026-08-14 13:06:19,027 | INFO | __main__ | main.py:142 | Executing source query for table general_ledger_line_items
+2026-08-14 13:06:19,027 | DEBUG | __main__ | main.py:143 | Source query: SELECT COALESCE(TO_CHAR(effective_on, 'YYYY-MM-DD HH24:MI:SS'), '') AS effective_on, COALESCE(TRIM(description), '') AS description, COALESCE(CAST(amount AS VARCHAR), '') AS amount, COALESCE(CAST(account_balance_id AS VARCHAR), '') AS account_balance_id, COALESCE(CAST(tenant_id AS VARCHAR), '') AS tenant_id, COALESCE(CAST(ledger_id AS VARCHAR), '') AS ledger_id, COALESCE(CAST(facility_id AS VARCHAR), '') AS facility_id, COALESCE(TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS created_at, COALESCE(TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS updated_at, COALESCE(CAST(uuid AS VARCHAR), '') AS uuid,
+CASE WHEN reversal IS TRUE THEN 'TRUE' WHEN reversal IS FALSE THEN 'FALSE' ELSE '' END AS reversal,
+COALESCE(CAST(account_balance_item_id AS VARCHAR), '') AS account_balance_item_id, COALESCE(TRIM(internal_account_code), '') AS internal_account_code,
+CASE WHEN daily_transaction IS TRUE THEN 'TRUE' WHEN daily_transaction IS FALSE THEN 'FALSE' ELSE '' END AS daily_transaction,
+COALESCE(TRIM(transaction_type), '') AS transaction_type,
+CASE WHEN hidden IS TRUE THEN 'TRUE' WHEN hidden IS FALSE THEN 'FALSE' ELSE '' END AS hidden,
+COALESCE(TRIM(reference_number), '') AS reference_number, COALESCE(TRIM(display_code), '') AS display_code, COALESCE(CAST(id AS VARCHAR), '') AS id
+FROM public.general_ledger_line_items ORDER BY id;
+2026-08-14 13:06:19,196 | INFO | __main__ | main.py:148 | Executing target query for table general_ledger_line_items
+2026-08-14 13:06:19,196 | DEBUG | __main__ | main.py:149 | Target query: SELECT COALESCE(TO_CHAR(effective_on, 'YYYY-MM-DD HH24:MI:SS'), '') AS effective_on, COALESCE(TRIM(description), '') AS description, COALESCE(CAST(amount AS VARCHAR), '') AS amount, COALESCE(CAST(account_balance_id AS VARCHAR), '') AS account_balance_id, COALESCE(CAST(tenant_id AS VARCHAR), '') AS tenant_id, COALESCE(CAST(ledger_id AS VARCHAR), '') AS ledger_id, COALESCE(CAST(facility_id AS VARCHAR), '') AS facility_id, COALESCE(TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS created_at, COALESCE(TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS'), '') AS updated_at, COALESCE(CAST(uuid AS VARCHAR), '') AS uuid,
+CASE WHEN reversal = TRUE THEN 'TRUE' WHEN reversal = FALSE THEN 'FALSE' ELSE '' END AS reversal,
+COALESCE(CAST(account_balance_item_id AS VARCHAR), '') AS account_balance_item_id, COALESCE(TRIM(internal_account_code), '') AS internal_account_code,
+CASE WHEN daily_transaction = TRUE THEN 'TRUE' WHEN daily_transaction = FALSE THEN 'FALSE' ELSE '' END AS daily_transaction,
+COALESCE(TRIM(transaction_type), '') AS transaction_type,
+CASE WHEN hidden = TRUE THEN 'TRUE' WHEN hidden = FALSE THEN 'FALSE' ELSE '' END AS hidden,
+COALESCE(TRIM(reference_number), '') AS reference_number, COALESCE(TRIM(display_code), '') AS display_code, COALESCE(CAST(id AS VARCHAR), '') AS id
+FROM DEV_EDGE_BRONZE.STOREDGE_FMS_PUBLIC.GENERAL_LEDGER_LINE_ITEMS
+WHERE _FIVETRAN_ACTIVE = TRUE AND id in (56,59,60,69,70,71) ORDER BY id;
+2026-08-14 13:06:24,548 | DEBUG | __main__ | main.py:170 | Source row count: 6
+2026-08-14 13:06:24,548 | DEBUG | __main__ | main.py:171 | Target row count: 6
+2026-08-14 13:06:24,548 | INFO | __main__ | main.py:174 | Match/Mismatch: Match
+2026-08-14 13:06:24,549 | INFO | __main__ | main.py:176 | Validation passed for table=general_ledger_line_items validation=data_validation
+2026-08-14 13:06:24,549 | INFO | __main__ | main.py:181 | Creating summary file
+2026-08-14 13:06:24,553 | INFO | __main__ | main.py:255 | Validation job completed
+2026-08-14 13:06:24,553 | INFO | __main__ | main.py:256 | End Time: 2026-08-14 13:06:24
+2026-08-14 13:06:24,554 | INFO | __main__ | main.py:257 | Duration: 00:00:05
+2026-08-14 13:06:24,554 | INFO | __main__ | main.py:258 | Total failures: 0

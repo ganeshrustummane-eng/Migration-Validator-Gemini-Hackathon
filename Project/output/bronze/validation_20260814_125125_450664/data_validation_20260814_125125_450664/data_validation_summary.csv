@@ -1,0 +1,7 @@
+run_id,run_at,validation_performed,source_table_name,source_type,target_table_name,target_type,source_count,missing_in_source,target_count,missing_in_target,status,output_file_path,batch_start_time,batch_end_time,total_time_taken
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,time_zone_maps,snowflake,time_zone_maps,snowflake,149,0,149,0,PASS,,12:51:25,12:51:33,00:00:08
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,facility_groups,snowflake,facility_groups,snowflake,1438,0,1438,0,PASS,,12:51:33,12:51:44,00:00:10
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,companies,snowflake,companies,snowflake,11252,0,11252,0,PASS,,12:51:44,12:51:56,00:00:12
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,tiers,snowflake,tiers,snowflake,6304,0,6304,0,PASS,,12:51:56,12:52:08,00:00:11
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,account_code_sets,snowflake,account_code_sets,snowflake,6481,0,6481,0,PASS,,12:52:08,12:52:19,00:00:11
+20260814_125125_450664,14-Aug-2026 12:51:25.450679,data_validation,facilities,snowflake,facilities,snowflake,1051412,0,1051412,0,PASS,,12:52:19,12:54:36,00:02:17

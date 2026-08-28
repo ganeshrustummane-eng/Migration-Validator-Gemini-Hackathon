@@ -1,0 +1,44 @@
+{
+  "name": "DIAL-API",
+  "vendor": "customendpoint",
+  "apiKey": "${DIAL_API_KEY}",
+  "apiType": "chat-completions",
+  "models": [
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4 Optimized (Best Accuracy)",
+      "url": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-04-01-preview",
+      "toolCalling": true,
+      "vision": true,
+      "maxInputTokens": 128000,
+      "maxOutputTokens": 16000
+    },
+    {
+      "id": "gpt-4o-mini",
+      "name": "GPT-4 Mini (Faster & Cost-Effective)",
+      "url": "https://ai-proxy.lab.epam.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-04-01-preview",
+      "toolCalling": true,
+      "vision": true,
+      "maxInputTokens": 128000,
+      "maxOutputTokens": 16000
+    },
+    {
+      "id": "claude-3-5-sonnet",
+      "name": "Claude 3.5 Sonnet",
+      "url": "https://ai-proxy.lab.epam.com/anthropic/v1/messages",
+      "toolCalling": true,
+      "vision": true,
+      "maxInputTokens": 200000,
+      "maxOutputTokens": 4096
+    },
+    {
+      "id": "gemini-2.0-flash",
+      "name": "Gemini 2.0 Flash",
+      "url": "https://ai-proxy.lab.epam.com/google/v1beta/models/gemini-2.0-flash:generateContent",
+      "toolCalling": true,
+      "vision": true,
+      "maxInputTokens": 1000000,
+      "maxOutputTokens": 8192
+    }
+  ]
+}

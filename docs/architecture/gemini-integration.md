@@ -1,0 +1,286 @@
+# Gemini Integration
+
+## Overview
+
+Migration Validator integrates with Google Gemini through a **FastAPI connector** that exposes 24 structured tools via Gemini's function-calling API. The `GeminiAgent` class manages the full conversation loop, calling tools iteratively until the user's request is fully resolved.
+
+---
+
+## Integration Architecture
+
+```
+Gemini Client (google.com / Vertex AI)
+         │
+         │  1. User sends natural language message
+         │  2. Gemini identifies tool to call
+         │  3. Gemini sends function call JSON to connector
+         │
+         ▼
+POST /tools/{tool_name}
+{ "arguments": { ... } }
+         │
+         │  4. Connector authenticates request
+         │  5. Connector checks authorization
+         │  6. Connector dispatches to tool function
+         │  7. Tool calls Migration Validator engine
+         │
+         ▼
+Migration Validator Engine
+(ValidationPipeline, PlanStore, ApprovalStore...)
+         │
+         │  8. Tool returns structured result
+         │
+         ▼
+POST /tools/{tool_name} → Response JSON
+         │
+         │  9. Gemini formats response for user
+         │  10. Gemini may call another tool (multi-round)
+         │
+         ▼
+User receives natural language explanation
+```
+
+---
+
+## GeminiAgent Class
+
+**Location:** `src/gemini_connector/gemini_agent.py`
+
+**Status:** Implemented (prototype)
+
+### Initialization
+
+```python
+agent = GeminiAgent(
+    model="gemini-1.5-pro",      # from GEMINI_MODEL env var
+    api_key="...",               # from GOOGLE_API_KEY or GEMINI_API_KEY
+    max_tool_rounds=10           # prevents infinite loops
+)
+```
+
+### Conversation Loop
+
+```python
+result = agent.chat(
+    user_message="Validate the customer migration",
+    actor="jane.doe@company.com"
+)
+# Returns: {text: str, tool_calls: list, rounds: int}
+```
+
+The loop:
+1. Sends conversation history + tools to Gemini
+2. Gemini returns either text OR a tool call
+3. If tool call: connector dispatches it, appends result to history
+4. Loop repeats until Gemini returns text (max 10 rounds)
+
+### Offline Fallback
+
+When no Gemini API key is configured, `chat_offline()` parses keyword intent and returns pre-formatted responses from local data:
+
+| Keywords | Response |
+|----------|----------|
+| `summary`, `status`, `attention` | Migration summary from PlanStore |
+| `pending`, `review`, `approve` | Pending approvals from ApprovalStore |
+| `metrics`, `roi`, `business` | Business metrics from MetricsTracker |
+| `coverage`, `threshold` | Coverage report from plan data |
+| `connection`, `source` | Discovered connections |
+
+**Status:** Implemented (offline mode is a demo fallback — full Gemini requires `GOOGLE_API_KEY`)
+
+---
+
+## Tool Declarations
+
+All 24 tools are registered in `TOOL_DECLARATIONS` — a list of Gemini-compatible function schemas.
+
+Each declaration follows the Gemini function calling schema:
+
+```json
+{
+  "name": "get_migration_summary",
+  "description": "Returns an aggregated summary of migration status across all tables in a layer.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "layer": {
+        "type": "string",
+        "description": "Medallion layer: bronze, silver, gold, or reporting",
+        "enum": ["bronze", "silver", "gold", "reporting"]
+      }
+    },
+    "required": ["layer"]
+  }
+}
+```
+
+### Tool Registration Endpoint
+
+```
+GET /tools
+→ Returns: List of all 24 TOOL_DECLARATIONS in Gemini function-calling format
+```
+
+Gemini discovers tools on first connection and caches them for the session.
+
+---
+
+## System Prompt
+
+The `SYSTEM_PROMPT` in `gemini_agent.py` instructs Gemini on:
+
+- **Role:** Migration validation specialist using structured tools
+- **Confidence policy:** Explain auto-accepted vs. queued-for-review mappings
+- **Approval protocol:** Always require a human actor before write operations
+- **Coverage guidance:** Use `get_coverage` with explicit threshold parameter
+- **Workflow sequence:** discover → plan → review → approve → execute
+
+---
+
+## Multi-Round Tool Calling Example
+
+```
+User: "Validate the events table and explain any failures."
+
+Round 1:
+  Gemini → discover_connections()
+  Result: {connections: [{name: "fms", type: "postgresql"}, {name: "dev_bronze", type: "snowflake"}]}
+
+Round 2:
+  Gemini → generate_validation_plan(source_table="events", layer="bronze")
+  Result: {status: "complete", active_mappings: 38, pending_review: 0}
+
+Round 3:
+  Gemini → execute_validation(source_table="events", actor="jane.doe@corp.com")
+  Result: {status: "WARNING", coverage: 99.1%, failed_checks: 1}
+
+Round 4:
+  Gemini → get_validation_failures(source_table="events")
+  Result: {failures: [{column: "email", source_null_count: 12, target_null_count: 0}]}
+
+Gemini (text):
+  "Validation complete. 99.1% coverage across 38 columns.
+   One issue found: the 'email' column has 12 NULLs in PostgreSQL
+   but 0 NULLs in Snowflake. This suggests the Snowflake load
+   may be filtering NULL email records. Recommend reviewing the
+   Fivetran connector configuration for this table."
+```
+
+---
+
+## Connector Endpoints Used by Gemini
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/tools` | GET | Discover all 24 tool schemas |
+| `/tools/{tool_name}` | POST | Execute any tool |
+| `/chat` | POST | Conversational agent (per-actor session) |
+| `/health` | GET | Confirm connector is reachable |
+
+---
+
+## Token Efficiency Design
+
+The connector is designed to minimize Gemini token consumption:
+
+| Strategy | Implementation |
+|----------|---------------|
+| **Summary-first responses** | `get_migration_summary` returns stats, not raw data |
+| **Pagination** | All list tools support `page` / `page_size` (max 200) |
+| **ID references** | Plans and mappings referenced by ID, not inlined |
+| **Compact schemas** | Nested objects flattened where possible |
+| **No raw data dumps** | Connector never returns full dataset contents |
+| **Tool-specific responses** | Each tool returns only the fields Gemini needs |
+
+---
+
+## Session Management
+
+The connector maintains a per-actor agent cache:
+
+```python
+_agent_cache: Dict[str, GeminiAgent] = {}
+```
+
+Each actor (`jane.doe@company.com`) gets an isolated conversation history. The `/chat` endpoint accepts `reset: true` to clear history.
+
+---
+
+## Configuration
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `GOOGLE_API_KEY` | — | Primary Gemini API key |
+| `GEMINI_API_KEY` | — | Alias for `GOOGLE_API_KEY` |
+| `GEMINI_MODEL` | `gemini-1.5-pro` | Gemini model to use |
+
+---
+
+## Python Integration Example
+
+```python
+import google.generativeai as genai
+
+genai.configure(api_key="your-api-key")
+
+# Get tool declarations from connector
+import requests
+tools_response = requests.get("http://localhost:8001/tools").json()
+
+# Build Gemini tool config
+tools = [genai.protos.Tool(
+    function_declarations=[
+        genai.protos.FunctionDeclaration(**t) for t in tools_response
+    ]
+)]
+
+model = genai.GenerativeModel("gemini-1.5-pro", tools=tools)
+chat = model.start_chat()
+
+# Send a message
+response = chat.send_message("What tables need review?")
+
+# Handle tool calls
+for part in response.parts:
+    if fn := part.function_call:
+        # Forward to connector
+        result = requests.post(
+            f"http://localhost:8001/tools/{fn.name}",
+            json={"arguments": dict(fn.args)},
+            headers={"Authorization": "Bearer your-token"}
+        ).json()
+        # Send result back to Gemini
+        response = chat.send_message(
+            genai.protos.Content(
+                parts=[genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=fn.name, response=result
+                    )
+                )]
+            )
+        )
+```
+
+---
+
+## DIAL Proxy Integration (AI Mapping Backend)
+
+The validation pipeline uses EPAM DIAL as its AI backend for column mapping — separate from the Gemini conversational agent.
+
+```
+ValidationPipeline
+  → ambiguous column: "cust_created_ts" ↔ "CREATED_AT"
+  → calls DIAL proxy (ai-proxy.lab.epam.com)
+  → DIAL routes to GPT-4o (or Claude/Gemini/Llama based on model selection)
+  → returns: {match: "CREATED_AT", confidence: 0.88, transformation: "timestamp"}
+  → ValidationPipeline records AI recommendation in CanonicalValidationPlan
+```
+
+Configuration:
+
+```bash
+DIAL_API_KEY=your-dial-key
+DIAL_API_BASE=https://ai-proxy.lab.epam.com
+DIAL_API_VERSION=2025-04-01-preview
+DIAL_MODEL=gpt-4o
+```
