@@ -1,0 +1,43 @@
+postgresql:
+  dbname: postgres
+  user: postgres
+  password: postgres
+  host: localhost
+  port: 5432
+mssql:
+  driver: ODBC Driver 18 for SQL Server
+  server: localhost\SQLEXPRESS
+  database: DevT5000
+  uid: ""
+  pwd: ""
+
+# SRC_2_TYPE=mssqlserver
+# SRC_2_HOST=EPINHYDW1D68
+# SRC_2_PORT=1433
+# SRC_2_DATABASE=DevT5000
+# SRC_2_SCHEMA=dbo
+# SRC_2_AUTH=windows
+# SRC_2_USERNAME=AzureAD\GaneshRustumMane
+# SRC_2_PASSWORD=
+
+athena:
+  profile: sf-prod
+  aws_region: us-west-2
+  athena_db: stodl_analytics_prod
+  athena_output: s3://aws-athena-query-results-850077434821-us-west-2/
+snowflake:
+  snowflake_account: STORABLE-NON_PROD
+  snowflake_user: ARUNSAIKIRAN.S@STORABLE.COM
+  snowflake_role: FR_PLATFORM_DEVELOPER
+  externalbrowser: externalbrowser
+  snowflake_database: DEV_EDGE_BRONZE
+  snowflake_schema: STOREDGE_FMS_PUBLIC
+  snowflake_warehouse: DEVELOPER_WH
+
+
+#   # ── Snowflake target ─────────────────────────────────────────────────────────
+# SNOWFLAKE_ACCOUNT=ZJAUJWQ-EP12783
+# SNOWFLAKE_DATABASE=dev_edge_bronze
+# SNOWFLAKE_SCHEMA=storedge_fms_public
+# SNOWFLAKE_USERNAME=MANEGANESH99
+# SNOWFLAKE_PASSWORD=Ganeshmane@999

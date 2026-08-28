@@ -1,0 +1,25 @@
+postgresql:
+  dbname: fms
+  user: arunsaikiran.s_apono
+  password: 05]Dd4b&qW9TE}#a
+  host: development-fms-aurora.cluster-cag3fxs7egyz.us-east-1.rds.amazonaws.com
+  port: 5432
+mssql:
+  driver: ODBC Driver 18 for SQL Server
+  server: db-aws.indigo.smdservers.net,1400
+  database: DevT5000
+  uid: arunsaikiran.s_apono
+  pwd: $7S4WUj0oL%6t#C!
+athena:
+  profile: sf-prod
+  aws_region: us-west-2
+  athena_db: stodl_analytics_prod
+  athena_output: s3://aws-athena-query-results-850077434821-us-west-2/
+snowflake:
+  snowflake_account: STORABLE-NON_PROD
+  snowflake_user: ARUNSAIKIRAN.S@STORABLE.COM
+  snowflake_role: FR_PLATFORM_DEVELOPER
+  externalbrowser: externalbrowser
+  snowflake_database: DEV_EDGE_BRONZE
+  snowflake_schema: STOREDGE_FMS_PUBLIC
+  snowflake_warehouse: DEVELOPER_WH

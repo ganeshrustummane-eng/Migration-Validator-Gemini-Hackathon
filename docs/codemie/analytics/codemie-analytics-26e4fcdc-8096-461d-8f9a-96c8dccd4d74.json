@@ -1,0 +1,309 @@
+{
+  "meta": {
+    "generatedAt": "2026-08-27T06:17:53.530Z",
+    "rangeLabel": "all",
+    "agents": [
+      "claude"
+    ],
+    "projectFilter": "all",
+    "totals": {
+      "sessions": 1,
+      "durationMs": 26847644,
+      "turns": 37,
+      "files": 5,
+      "netLines": 5,
+      "toolCallsTotal": 34,
+      "toolSuccessRate": 100,
+      "totalCostUSD": 3.2720901000000002,
+      "cacheReadCostUSD": 0.5439351,
+      "pricedSessions": 1
+    },
+    "unpricedModels": [],
+    "coverage": [
+      {
+        "agentName": "claude",
+        "total": 1,
+        "priced": 1,
+        "withLog": 1
+      }
+    ],
+    "periodStart": "2026-08-26T09:44:06.894Z"
+  },
+  "sessions": [
+    {
+      "sessionId": "26e4fcdc-8096-461d-8f9a-96c8dccd4d74",
+      "agentName": "claude",
+      "provider": "ai-run-sso",
+      "title": "Error: 404 models/gemini-default-model is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.",
+      "project": "C:\\EPAM-Personal\\Migration-validator",
+      "branch": "gemini-hackathon-branch",
+      "startTime": 1787737446894,
+      "durationMs": 26847644,
+      "turns": 37,
+      "fileOps": 5,
+      "linesAdded": 56,
+      "linesRemoved": 51,
+      "linesModified": 0,
+      "netLines": 5,
+      "filesChanged": 4,
+      "filesWritten": 0,
+      "filesEdited": 4,
+      "toolCallsTotal": 34,
+      "toolCallsSuccess": 34,
+      "toolCallsFailure": 0,
+      "models": [
+        "claude-sonnet-4-6"
+      ],
+      "languages": [
+        "python",
+        "markdown"
+      ],
+      "tools": [
+        {
+          "toolName": "Edit",
+          "totalCalls": 16,
+          "successCount": 16,
+          "failureCount": 0,
+          "successRate": 100
+        },
+        {
+          "toolName": "Read",
+          "totalCalls": 10,
+          "successCount": 10,
+          "failureCount": 0,
+          "successRate": 100
+        },
+        {
+          "toolName": "PowerShell",
+          "totalCalls": 5,
+          "successCount": 5,
+          "failureCount": 0,
+          "successRate": 100
+        },
+        {
+          "toolName": "Grep",
+          "totalCalls": 3,
+          "successCount": 3,
+          "failureCount": 0,
+          "successRate": 100
+        }
+      ],
+      "tokens": {
+        "input": 46,
+        "output": 15379,
+        "cacheRead": 1813117,
+        "cacheCreation": 416222,
+        "cacheCreation1h": 416222,
+        "total": 2244764
+      },
+      "costUSD": 3.2720901000000002,
+      "cacheReadCostUSD": 0.5439351,
+      "perModelCost": [
+        {
+          "model": "claude-sonnet-4-6",
+          "tokens": {
+            "input": 46,
+            "output": 15379,
+            "cacheRead": 1813117,
+            "cacheCreation": 416222,
+            "cacheCreation1h": 416222,
+            "total": 2244764
+          },
+          "costUSD": 3.2720901000000002,
+          "unpriced": false
+        }
+      ],
+      "costSeries": [
+        {
+          "t": 1787737644684,
+          "cost": 0.0767796,
+          "tokens": 44954
+        },
+        {
+          "t": 1787737648711,
+          "cost": 0.1622982,
+          "tokens": 91773
+        },
+        {
+          "t": 1787737653887,
+          "cost": 0.4470342,
+          "tokens": 138967
+        },
+        {
+          "t": 1787737657300,
+          "cost": 0.5378868,
+          "tokens": 186663
+        },
+        {
+          "t": 1787737663862,
+          "cost": 0.5748243,
+          "tokens": 234869
+        },
+        {
+          "t": 1787737673342,
+          "cost": 0.5993037,
+          "tokens": 283390
+        },
+        {
+          "t": 1787737684643,
+          "cost": 0.6212148,
+          "tokens": 332364
+        },
+        {
+          "t": 1787737688901,
+          "cost": 0.6398127,
+          "tokens": 381613
+        },
+        {
+          "t": 1787737692848,
+          "cost": 0.6631254,
+          "tokens": 431172
+        },
+        {
+          "t": 1787737698194,
+          "cost": 0.6970809,
+          "tokens": 480965
+        },
+        {
+          "t": 1787738157045,
+          "cost": 0.7301691,
+          "tokens": 531411
+        },
+        {
+          "t": 1787738246624,
+          "cost": 0.8978781,
+          "tokens": 597302
+        },
+        {
+          "t": 1787738251935,
+          "cost": 0.9210018,
+          "tokens": 657547
+        },
+        {
+          "t": 1787738261101,
+          "cost": 0.9483408,
+          "tokens": 718486
+        },
+        {
+          "t": 1787738279307,
+          "cost": 1.0544172,
+          "tokens": 781067
+        },
+        {
+          "t": 1787738287556,
+          "cost": 1.0882026,
+          "tokens": 843961
+        },
+        {
+          "t": 1787738294012,
+          "cost": 1.1864385,
+          "tokens": 907087
+        },
+        {
+          "t": 1787738297531,
+          "cost": 1.2818298,
+          "tokens": 970479
+        },
+        {
+          "t": 1787738300587,
+          "cost": 1.304871,
+          "tokens": 1034029
+        },
+        {
+          "t": 1787738315464,
+          "cost": 1.3401429,
+          "tokens": 1097793
+        },
+        {
+          "t": 1787738323623,
+          "cost": 1.3651212,
+          "tokens": 1161757
+        },
+        {
+          "t": 1787738329686,
+          "cost": 1.3895502,
+          "tokens": 1226101
+        },
+        {
+          "t": 1787738336209,
+          "cost": 1.4211489,
+          "tokens": 1290764
+        },
+        {
+          "t": 1787738347263,
+          "cost": 1.4447745,
+          "tokens": 1355666
+        },
+        {
+          "t": 1787738485204,
+          "cost": 1.4762103,
+          "tokens": 1421337
+        },
+        {
+          "t": 1787738496718,
+          "cost": 1.5034944,
+          "tokens": 1487342
+        },
+        {
+          "t": 1787738502146,
+          "cost": 1.5273765,
+          "tokens": 1553639
+        },
+        {
+          "t": 1787738506654,
+          "cost": 1.6925196,
+          "tokens": 1620128
+        },
+        {
+          "t": 1787738511066,
+          "cost": 1.8602907,
+          "tokens": 1686968
+        },
+        {
+          "t": 1787738514905,
+          "cost": 1.8852969,
+          "tokens": 1753985
+        },
+        {
+          "t": 1787738525336,
+          "cost": 1.9116567,
+          "tokens": 1821104
+        },
+        {
+          "t": 1787745992844,
+          "cost": 2.1257223,
+          "tokens": 1889041
+        },
+        {
+          "t": 1787746022538,
+          "cost": 2.5601253,
+          "tokens": 1959636
+        },
+        {
+          "t": 1787764243702,
+          "cost": 2.7913929,
+          "tokens": 2030578
+        },
+        {
+          "t": 1787764258733,
+          "cost": 3.2197419,
+          "tokens": 2101760
+        },
+        {
+          "t": 1787764276782,
+          "cost": 3.2453502,
+          "tokens": 2173207
+        },
+        {
+          "t": 1787764294538,
+          "cost": 3.2720901,
+          "tokens": 2244764
+        }
+      ],
+      "skillInvocations": [],
+      "agentInvocations": [],
+      "commandInvocations": [],
+      "sessionSource": "Pure chat"
+    }
+  ]
+}
