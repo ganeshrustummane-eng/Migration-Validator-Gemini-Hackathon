@@ -20,8 +20,15 @@ Or streaming:
     for chunk in agent.stream("Show me tables needing attention"):
         print(chunk, end="", flush=True)
 
-Environment variables:
-    GOOGLE_API_KEY or GEMINI_API_KEY — required for Gemini
+Environment variables (one auth path required for online mode):
+    GOOGLE_API_KEY or GEMINI_API_KEY — Gemini Developer API (Google AI Studio) key.
+        Some corporate-governed GCP projects disable personal API key creation by
+        org policy — use the Vertex AI path below instead in that case.
+    GOOGLE_GENAI_USE_VERTEXAI=true, plus GOOGLE_CLOUD_PROJECT and
+        GOOGLE_CLOUD_LOCATION — Vertex AI's Gemini API instead of the Developer
+        API. Authenticates via Application Default Credentials (ADC) — no API
+        key needed. Locally: `gcloud auth application-default login`. On Cloud
+        Run: the service's own runtime service account is used automatically.
     GEMINI_MODEL                      — default model (gemini-3.6-flash)
 """
 
@@ -43,6 +50,22 @@ for _p in (str(_SRC), str(_ROOT)):
         sys.path.insert(0, _p)
 
 from gemini_connector.tools import dispatch_tool
+
+
+def _vertexai_configured() -> bool:
+    """True if Vertex AI mode is selected via env vars (ADC-based auth, no
+    API key). This is the standard workaround when a corporate-governed GCP
+    project disables personal Gemini Developer API key creation by policy."""
+    return os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower() in ("true", "1", "yes")
+
+
+def is_gemini_configured() -> bool:
+    """True if either a Gemini Developer API key or Vertex AI mode is
+    configured — the single source of truth for "is online AI available",
+    used by create_agent(), the REST API, and the webapp status display so
+    they can never disagree about which mode is active."""
+    return bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")) or _vertexai_configured()
+
 
 # ---------------------------------------------------------------------------
 # Tool declarations for Gemini function-calling
@@ -429,6 +452,9 @@ class GeminiAgent:
     ):
         self._model_name = model or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
         self._api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
+        self._use_vertexai = _vertexai_configured()
+        self._vertex_project = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+        self._vertex_location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
         self._max_rounds = max_tool_rounds
         self._history: List[Dict[str, Any]] = []
         self._client = None
@@ -440,7 +466,15 @@ class GeminiAgent:
             from google import genai
             from google.genai import types as genai_types
             self._genai_types = genai_types
-            self._client = genai.Client(api_key=self._api_key)
+            if self._use_vertexai:
+                # ADC-based auth (no API key) — gcloud auth application-default
+                # login locally, or the Cloud Run service's own runtime
+                # identity in production.
+                self._client = genai.Client(
+                    vertexai=True, project=self._vertex_project, location=self._vertex_location,
+                )
+            else:
+                self._client = genai.Client(api_key=self._api_key)
             return self._client
         except ImportError:
             raise RuntimeError(
@@ -890,21 +924,24 @@ def create_agent(max_tool_rounds: int = 10):
     Return the best available agent backend in priority order:
 
         1. DIALAgent  — if DIAL_API_KEY is set (EPAM DIAL, no rate limit)
-        2. GeminiAgent — if GOOGLE_API_KEY / GEMINI_API_KEY is set (20 req/day free tier)
+        2. GeminiAgent — if GOOGLE_API_KEY / GEMINI_API_KEY is set (Developer
+           API, 20 req/day free tier), OR GOOGLE_GENAI_USE_VERTEXAI=true is
+           set (Vertex AI via ADC — no personal API key needed; the path for
+           corporate-governed projects that disable API key creation)
         3. GeminiAgent — configured for offline mode (no API calls)
 
     The returned object always exposes .chat(), .chat_offline(), and .reset()
     so callers need no conditional logic.
     """
-    dial_key   = os.getenv("DIAL_API_KEY", "")
-    gemini_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
+    dial_key = os.getenv("DIAL_API_KEY", "")
 
     if dial_key:
         logger.info("[create_agent] Using DIALAgent (EPAM DIAL / GPT-4o)")
         return DIALAgent(max_tool_rounds=max_tool_rounds)
 
-    if gemini_key:
-        logger.info("[create_agent] Using GeminiAgent (Google Gemini API)")
+    if is_gemini_configured():
+        mode = "Vertex AI / ADC" if _vertexai_configured() else "Developer API key"
+        logger.info(f"[create_agent] Using GeminiAgent ({mode})")
         return GeminiAgent(max_tool_rounds=max_tool_rounds)
 
     logger.warning("[create_agent] No API key found — using offline mode")
