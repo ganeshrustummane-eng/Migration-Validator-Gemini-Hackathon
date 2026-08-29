@@ -240,7 +240,7 @@ python demo_security.py
 >   Connection strings, passwords, API keys — none of them appear.
 >   Gemini sees data, never credentials.
 >
-> 31 security tests. All passing."
+> 34 security tests. All passing."
 
 ---
 
@@ -309,3 +309,56 @@ When you approve the `created_ts` mapping in Segment 5, pause and say:
 
 That sentence captures Write-Back & Authentication, Human-in-the-Loop, and Enterprise
 Governance in 15 words. Make sure you say it clearly.
+
+---
+
+## Bonus Segment (Optional) — Validation Execution Engine
+
+Not part of the timed 5-minute cut above — use this if you have a longer demo slot,
+a live Q&A, or a technical follow-up session. Covers `Project/main.py`'s YAML-driven
+execution engine and its webapp surface, which the 5-minute script above doesn't touch.
+
+**[Screen: 🚀 Run Validation tab]**
+
+> "Behind Generate Single/Batch YAML is a second engine — Project/main.py — that
+> actually executes those YAML plans against live source and Snowflake connections.
+> This tab lets you pick exactly which generated YAML files to run, file by file,
+> not just by table name."
+
+**[Select all files, click Run validation]**
+
+> "That's real count and data validation queries running right now against
+> Postgres, MSSQL, and Snowflake. Results come back as paginated cards —
+> summary first, then every row-level mismatch is available to drill into,
+> without ever leaving the browser or opening a CSV by hand."
+
+**[Expand a mismatch detail file, e.g. events]**
+
+> "Every diff file stays local — it's never sent to any AI model. Only counts
+> and pass/fail status are ever surfaced upstream."
+
+**[Switch to 📈 History & Trends]**
+
+> "Every run is recorded automatically — SQLite-backed, not scattered log
+> folders. I can see pass-rate trends per table over time, and drill into
+> any historical run."
+
+**[Switch to ✅ Review & Approve, set layer to "All"]**
+
+> "Review and Approve now aggregates across every medallion layer at once —
+> bronze, silver, gold — instead of checking one at a time. And if a mapping
+> needs follow-up beyond what a human can resolve in this session, there's a
+> one-click Jira ticket, pre-filled with the table, columns, confidence, and
+> AI recommendation, so nothing falls through the cracks between this tool
+> and the team's existing workflow."
+
+**Optional closer, if judges ask about testing rigor:**
+
+> "We didn't just build these features — we verified them end-to-end, and in
+> doing so found and fixed four real bugs: a count-validation PASS/FAIL check
+> that was comparing the wrong columns and always failing, a case-sensitivity
+> bug that silently crashed every data validation before it could write a
+> result, a stale-environment-variable bug in the auth layer that only
+> surfaced under test isolation, and a Windows console encoding crash in our
+> own startup script. All fixed, all covered by the test suite now — 92
+> passing, including 34/34 in the security suite."

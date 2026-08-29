@@ -11,9 +11,16 @@ build/
 
 # Secrets — never commit
 .env
+.env.*
+!.env.example
 
 # Reports
 validation_reports/
+
+# Project/main.py run artifacts (logs, per-run CSVs, results DB) — generated,
+# grows unbounded, and per-table diff CSVs can carry real row values.
+# (root output/ is intentionally tracked — connector demo evidence.)
+Project/output/
 
 # IDE
 .vscode/settings.json
@@ -22,9 +29,3 @@ validation_reports/
 # OS
 .DS_Store
 Thumbs.db
-
-# Credentials
-creds/local.yaml
-.env
-
-.env

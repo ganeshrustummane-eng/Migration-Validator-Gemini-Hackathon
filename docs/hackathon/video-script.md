@@ -130,7 +130,7 @@ python demo_security.py
 >
 > Zero credential leakage — Gemini receives tool results, never passwords or connection strings.
 >
-> All 31 security tests pass."
+> All 34 security tests pass."
 
 ---
 

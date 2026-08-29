@@ -1,52 +1,97 @@
-import yaml
 import os
+from pathlib import Path
+
+from dotenv import dotenv_values
+
 from db.postgres import Postgres
 from db.mssqlserver import Mssqlserver
 from db.athena import Athena
 from db.snowflake import Snowflake
 
-#Reading creds yaml
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = PROJECT_DIR.parent
 
-def get_database(db_type,BASE_DIR,env):
-    creds_path = os.path.join(BASE_DIR,"creds",f"{env}.yaml")
-    with open(creds_path) as f:
-        file = yaml.safe_load(f)    
+# One .env file per environment — same shape/keys as the root .env already
+# used by webapp/src (SRC_N_*, SNOWFLAKE_*), just a different file per target.
+# This replaces the old Project/creds/<env>.yaml scheme so there is a single
+# credential format instead of two.
+_ENV_FILE_BY_ENVIRONMENT = {
+    "local": ".env",
+    "dev": ".env.dev",
+    "uat": ".env.uat",
+    "prod": ".env.prod",
+}
+
+_TYPE_ALIASES = {
+    "postgresql": {"postgresql", "postgres"},
+    "mssql": {"mssql", "mssqlserver"},
+    "athena": {"athena", "aws_athena"},
+}
+
+
+def _load_env(environment: str) -> dict:
+    fname = _ENV_FILE_BY_ENVIRONMENT.get(environment, f".env.{environment}")
+    path = ROOT_DIR / fname
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No env file for environment '{environment}': expected {path}. "
+            f"Copy .env.example to {fname} and fill in real values."
+        )
+    return dotenv_values(path)
+
+
+def _find_source(env: dict, db_type: str) -> dict:
+    """First SRC_N_* connection in env whose TYPE matches db_type. Returns the
+    per-connection fields with the 'SRC_N_' prefix stripped."""
+    wanted = _TYPE_ALIASES.get(db_type, {db_type})
+    for i in range(1, 11):
+        prefix = f"SRC_{i}_"
+        raw_type = (env.get(f"{prefix}TYPE") or "").lower().strip()
+        if raw_type in wanted:
+            return {k[len(prefix):]: v for k, v in env.items() if k.startswith(prefix) and v}
+    raise ValueError(
+        f"No SRC_N_TYPE={db_type} connection found for this environment's env file. "
+        f"Add one (SRC_N_TYPE={db_type}, SRC_N_HOST, SRC_N_DATABASE, ...)."
+    )
+
+
+def get_database(db_type, BASE_DIR, environment):
+    env = _load_env(environment)
 
     if db_type == "postgresql":
-        postgres = file['postgresql']
-        dbname = postgres['dbname']
-        host = postgres['host']
-        user = postgres['user']
-        password = postgres['password']
-        return Postgres(dbname=dbname,host=host,user=user,password=password,port=5432)
-    
-    elif db_type == 'mssql':
-        mssqlserver = file['mssql']
-        driver = mssqlserver['driver']
-        server = mssqlserver['server']
-        database = mssqlserver['database']
-        uid = mssqlserver['uid']
-        pwd = mssqlserver['pwd']
-        return Mssqlserver(DRIVER=driver,SERVER=server,DATABASE=database,UID=uid,PWD=pwd)
-    
+        src = _find_source(env, "postgresql")
+        return Postgres(
+            dbname=src["DATABASE"], host=src["HOST"],
+            user=src["USERNAME"], password=src.get("PASSWORD", ""),
+            port=int(src.get("PORT") or 5432),
+        )
+
+    elif db_type == "mssql":
+        src = _find_source(env, "mssql")
+        return Mssqlserver(
+            DRIVER=src.get("DRIVER", "ODBC Driver 18 for SQL Server"),
+            SERVER=src["HOST"], DATABASE=src["DATABASE"],
+            UID=src.get("USERNAME", ""), PWD=src.get("PASSWORD", ""),
+        )
+
     elif db_type == "athena":
-        athena = file['athena']
-        profile = athena['profile']
-        aws_region = athena['aws_region']
-        athena_db = athena['athena_db']
-        athena_output = athena['athena_output']
-        return Athena(PROFILE=profile,AWS_REGION=aws_region,ATHENA_DB=athena_db,ATHENA_OUTPUT=athena_output)
-    
+        src = _find_source(env, "athena")
+        region = src.get("REGION") or src.get("HOST", "us-east-1")
+        s3_output = src.get("QUERY_RESULT_LOCATION") or env.get("ATHENA_S3_OUTPUT", "")
+        return Athena(
+            AWS_REGION=region, ATHENA_DB=src["DATABASE"], ATHENA_OUTPUT=s3_output,
+            ACCESS_KEY=src.get("USERNAME", ""), SECRET_KEY=src.get("PASSWORD", ""),
+        )
+
     elif db_type == "snowflake":
-        snowflake = file['snowflake']
-        snowflake_account = snowflake['snowflake_account']
-        snowflake_user = snowflake['snowflake_user']
-        snowflake_role = snowflake['snowflake_role']
-        externalbrowser = snowflake['externalbrowser']
-        snowflake_database = snowflake['snowflake_database']
-        snowflake_schema = snowflake['snowflake_schema']
-        snowflake_warehouse = snowflake['snowflake_warehouse']
-        return Snowflake(SNOWFLAKE_ACCOUNT=snowflake_account,SNOWFLAKE_USER=snowflake_user,SNOWFLAKE_ROLE=snowflake_role,externalbrowser=externalbrowser,SNOWFLAKE_DATABASE=snowflake_database,SNOWFLAKE_SCHEMA=snowflake_schema,SNOWFLAKE_WAREHOUSE=snowflake_warehouse)
+        return Snowflake(
+            SNOWFLAKE_ACCOUNT=env.get("SNOWFLAKE_ACCOUNT", ""),
+            SNOWFLAKE_USER=env.get("SNOWFLAKE_USERNAME", ""),
+            SNOWFLAKE_PASSWORD=env.get("SNOWFLAKE_PASSWORD", ""),
+            SNOWFLAKE_DATABASE=env.get("SNOWFLAKE_DATABASE", ""),
+            SNOWFLAKE_SCHEMA=env.get("SNOWFLAKE_SCHEMA", ""),
+            SNOWFLAKE_WAREHOUSE=env.get("SNOWFLAKE_WAREHOUSE", ""),
+        )
+
     else:
         raise ValueError(f"Unsupported database: {db_type}")

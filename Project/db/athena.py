@@ -5,14 +5,21 @@ import time
 
 
 class Athena(Database):
-    def __init__(self,PROFILE,AWS_REGION,ATHENA_DB,ATHENA_OUTPUT):
-        self.PROFILE = PROFILE
+    def __init__(self,AWS_REGION,ATHENA_DB,ATHENA_OUTPUT,ACCESS_KEY="",SECRET_KEY=""):
         self.AWS_REGION = AWS_REGION
         self.ATHENA_DB = ATHENA_DB
         self.ATHENA_OUTPUT = ATHENA_OUTPUT
+        self.ACCESS_KEY = ACCESS_KEY
+        self.SECRET_KEY = SECRET_KEY
 
     def connect(self):
-        session = boto3.Session(profile_name=self.PROFILE, region_name=self.AWS_REGION)
+        kwargs = dict(region_name=self.AWS_REGION)
+        if self.ACCESS_KEY and self.SECRET_KEY:
+            kwargs["aws_access_key_id"] = self.ACCESS_KEY
+            kwargs["aws_secret_access_key"] = self.SECRET_KEY
+        # Falls back to the default boto3 credential chain (AWS CLI profile,
+        # instance role, etc.) when explicit keys aren't provided.
+        session = boto3.Session(**kwargs)
         athena = session.client("athena")
         return athena
     

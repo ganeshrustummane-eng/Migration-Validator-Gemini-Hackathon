@@ -10,12 +10,12 @@
     "database": "dev_edge_bronze",
     "db_type": "snowflake",
     "schema": "storedge_fms_public",
-    "table": "events"
+    "table": "EVENTS"
   },
   "source_table": "fms.public.events",
-  "target_table": "dev_edge_bronze.storedge_fms_public.events",
+  "target_table": "dev_edge_bronze.storedge_fms_public.EVENTS",
   "status": "complete",
-  "generated_at": "2026-08-27T17:39:44.017988",
+  "generated_at": "2026-08-28T11:10:54.140653",
   "generated_by": "ai",
   "model_used": "gpt-4o",
   "ai_calls_made": 0,
@@ -32,17 +32,17 @@
     "mismatch_reason": "Source PK ['id'] does not match target PK ['ID', '_FIVETRAN_START'] (normalized: ['id'] vs ['id', 'fivetranstart']). Using fuzzy/AI matching — verify manually."
   },
   "stats": {
-    "total_source_columns": 39,
-    "active_mappings": 39,
+    "total_source_columns": 38,
+    "active_mappings": 38,
     "skipped_mappings": 0,
-    "exact_matches": 39,
+    "exact_matches": 38,
     "fuzzy_matches": 0,
     "ai_resolved": 0,
     "unmatched_source": 0
   },
   "exclusions": {
-    "total_source_columns": 39,
-    "validated": 39,
+    "total_source_columns": 38,
+    "validated": 38,
     "excluded": [],
     "excluded_count": 0,
     "coverage_pct": 100.0
@@ -283,19 +283,6 @@
       "target_column": "RELATED_OBJECT_TYPE",
       "target_type": "TEXT",
       "target_normalized": "relatedobjecttype",
-      "match_method": "exact",
-      "confidence": 1.0,
-      "transformation_rule": "text",
-      "validation_rules": [],
-      "reason": "Matched by exact (confidence=1.00)"
-    },
-    {
-      "source_column": "uuid",
-      "source_type": "uuid",
-      "source_normalized": "uuid",
-      "target_column": "UUID",
-      "target_type": "TEXT",
-      "target_normalized": "uuid",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",

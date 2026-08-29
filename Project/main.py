@@ -156,21 +156,29 @@ for validation in validation_dirs:
                     source_df.columns = source_df.columns.str.strip().str.lower()
                     target_df.columns = target_df.columns.str.strip().str.lower()
 
-                    if validation_name == "count_validation": 
+                    if validation_name == "count_validation":
                         source_rows = source_df['source_row_count'].iloc[0]
                         target_rows = target_df['target_row_count'].iloc[0]
                         logger.debug("Source row count: %s", source_rows)
                         logger.debug("Target row count: %s", target_rows)
 
                         output_file_path = ""
+                        # Count validation compares two single-row frames with
+                        # deliberately different column names
+                        # (source_row_count vs target_row_count), so
+                        # DataFrame.equals() is always False here regardless
+                        # of whether the counts match — compare the values
+                        # directly instead.
+                        is_match = int(source_rows) == int(target_rows)
                     else:
                         source_rows = len(source_df)
                         target_rows = len(target_df)
                         output_file_path = ""
                         logger.debug("Source row count: %s", source_rows)
                         logger.debug("Target row count: %s", target_rows)
-                
-                    if source_df.equals(target_df):
+                        is_match = source_df.equals(target_df)
+
+                    if is_match:
                         logger.info("Match/Mismatch: Match")
                         status = "PASS"
                         logger.info(
@@ -199,17 +207,14 @@ for validation in validation_dirs:
                         filepath = os.path.join(output_path,f"{table_name}_{validation}_result_{run_id}.csv")
                         logger.info("Saving mismatch data to %s", filepath)
                         if validation != 'count_validation':
-
-
-                            print(" xx "*100)
-                            print("Source columns:", source_df.columns.tolist())
-                            print("Target columns:", target_df.columns.tolist())
-                            print("Source index:", source_df.index)
-                            print("Target index:", target_df.index)
-                            print(target_df.columns)
-                            print(" xx "*100)
-                            source_df = source_df.set_index(pksourcecolumn)
-                            target_df = target_df.set_index(pktargetcolumn)
+                            # source_df/target_df columns were lowercased above
+                            # (source_df.columns = ...str.lower()) but
+                            # pksourcecolumn/pktargetcolumn come straight from the
+                            # YAML as-authored (e.g. "AcctSoftwareID_normalized"),
+                            # so set_index needs the same lowercasing or it raises
+                            # KeyError: "None of [...] are in the columns".
+                            source_df = source_df.set_index(pksourcecolumn.lower())
+                            target_df = target_df.set_index(pktargetcolumn.lower())
                             missing_in_source = target_df.index.difference(source_df.index)
                             missing_in_target = source_df.index.difference(target_df.index)
                             common_idx = source_df.index.intersection(target_df.index)

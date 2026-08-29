@@ -22,6 +22,13 @@ import argparse
 import sys
 from pathlib import Path
 
+# Windows terminals often default stdout/stderr to cp1252, which can't encode
+# the box-drawing banner below (or any other non-ASCII print) — crashes with
+# UnicodeEncodeError before the server even starts. Force UTF-8 unconditionally.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 _SRC = Path(__file__).parent / "src"
 _ROOT = Path(__file__).parent
 for _p in (str(_SRC), str(_ROOT)):
@@ -55,7 +62,7 @@ def main():
 ║  Tools:   http://localhost:{args.port}/tools                       ║
 ║                                                              ║
 ║  Register /tools endpoint in Gemini Enterprise connector     ║
-║  to enable all 23 migration tools.                           ║
+║  to enable all 24 migration tools.                           ║
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
