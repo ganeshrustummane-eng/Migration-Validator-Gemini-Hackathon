@@ -1829,18 +1829,28 @@ st.markdown("""
 .st-key-gemini_chat_panel {
     position: fixed !important; bottom: 100px !important; right: 24px !important;
     z-index: 9999 !important; left: auto !important;
-    /* Sized, not locked: a starting width/height that the user can then drag from
-       the bottom-right corner (native CSS resize handle) instead of being stuck
-       with a fixed 400px box. `resize` needs a non-visible `overflow` to render
-       the handle, and the size values below must NOT be `!important` or the
-       browser's own resize-driven inline style can never override them. */
-    width: 400px; height: 520px;
-    min-width: 320px; min-height: 300px;
-    max-width: 92vw; max-height: 90vh;
-    resize: both; overflow: auto;
+    /* Width/height are set by a second, dynamic <style> block further down based
+       on st.session_state["_gemini_chat_size"] — NOT a native CSS `resize`
+       handle. Streamlit's own components only recompute their layout on an
+       actual rerun; dragging a native resize handle changes the container's
+       box size without Streamlit ever re-running, so the widgets inside keep
+       their originally-computed widths and visibly overlap. A button-driven
+       size toggle (see below) triggers a real rerun instead, so everything
+       inside reflows correctly for the new size. */
+    max-width: 92vw !important; max-height: 85vh !important;
+    overflow-y: auto;
     background: var(--background-color, white); border-radius: 16px;
     box-shadow: 0 10px 32px rgba(0,0,0,0.28); padding: 0;
     border: 1px solid rgba(128,128,128,0.2);
+}
+.st-key-gemini_chat_size_btn {
+    position: fixed !important; z-index: 10001 !important; left: auto !important;
+}
+.st-key-gemini_chat_size_btn button {
+    width: 28px !important; height: 28px !important; min-width: 28px !important;
+    padding: 0 !important; border-radius: 50% !important;
+    background: rgba(255,255,255,0.25) !important; color: white !important;
+    border: none !important; font-size: 0.85rem !important; line-height: 1 !important;
 }
 .gemini-chat-header {
     background: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%);
@@ -1860,6 +1870,8 @@ st.markdown("""
 
 if "_gemini_chat_open" not in st.session_state:
     st.session_state["_gemini_chat_open"] = False
+if "_gemini_chat_size" not in st.session_state:
+    st.session_state["_gemini_chat_size"] = "default"
 
 with st.container(key="gemini_chat_toggle"):
     _toggle_label = "✕" if st.session_state["_gemini_chat_open"] else "✨"
@@ -1867,8 +1879,33 @@ with st.container(key="gemini_chat_toggle"):
         st.session_state["_gemini_chat_open"] = not st.session_state["_gemini_chat_open"]
         st.rerun()
 
+# Discrete size presets applied via a real Streamlit rerun (not a native CSS
+# resize drag) — see the note on .st-key-gemini_chat_panel above for why.
+_GEMINI_CHAT_SIZES = {"default": (400, 520), "large": (640, 760)}
+_gemini_size = st.session_state["_gemini_chat_size"]
+_gemini_w, _gemini_h = _GEMINI_CHAT_SIZES.get(_gemini_size, _GEMINI_CHAT_SIZES["default"])
+_gemini_btn_bottom = 100 + _gemini_h - 36
+_gemini_btn_right = 24 + _gemini_w - 36
+st.markdown(
+    f"<style>"
+    f".st-key-gemini_chat_panel {{ width: {_gemini_w}px !important; height: {_gemini_h}px !important; }}"
+    f".st-key-gemini_chat_size_btn {{ bottom: {_gemini_btn_bottom}px !important; right: {_gemini_btn_right}px !important; }}"
+    f"</style>",
+    unsafe_allow_html=True,
+)
+
 if not st.session_state["_gemini_chat_open"]:
-    st.markdown('<style>.st-key-gemini_chat_panel { display: none !important; }</style>', unsafe_allow_html=True)
+    st.markdown(
+        '<style>.st-key-gemini_chat_panel, .st-key-gemini_chat_size_btn '
+        '{ display: none !important; }</style>',
+        unsafe_allow_html=True,
+    )
+else:
+    with st.container(key="gemini_chat_size_btn"):
+        _size_label = "⤡" if _gemini_size == "large" else "⤢"
+        if st.button(_size_label, key="gemini_chat_size_btn_inner", help="Toggle chat panel size"):
+            st.session_state["_gemini_chat_size"] = "default" if _gemini_size == "large" else "large"
+            st.rerun()
 
 with st.container(key="gemini_chat_panel"):
     st.markdown(
