@@ -25,8 +25,9 @@ from pathlib import Path
 _WEBAPP_DIR = Path(__file__).parent
 _ROOT_DIR   = _WEBAPP_DIR.parent
 _SRC_DIR    = _ROOT_DIR / "src"
+_PROJECT_DIR = _ROOT_DIR / "Project"
 
-for p in (str(_SRC_DIR), str(_ROOT_DIR)):
+for p in (str(_SRC_DIR), str(_ROOT_DIR), str(_PROJECT_DIR)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -55,6 +56,8 @@ from model_probe import get_working_models
 from learning.feedback import FeedbackRecorder, MismatchFeedback
 import mapping_store
 from generated_queries.ai_sql_generator import AISQLQueryGenerator, AISQLGenerationError
+from runner import list_configured_tables, run_validation
+import results_store
 
 sys.path.insert(0, str(_ROOT_DIR / "token_usage_analysis"))
 from report_token_usage import _load_records as _load_token_records, _load_pricing, _cost_for
@@ -127,6 +130,52 @@ def _show_pending_flash():
 
 
 _show_pending_flash()
+
+
+# ---------------------------------------------------------------------------
+# Paginated CSV/DataFrame viewer — used anywhere a validation result set could
+# be large (summary CSVs, row-level mismatch diffs) instead of dumping the
+# whole thing into one st.dataframe.
+# ---------------------------------------------------------------------------
+
+def _style_status(df):
+    """Colors a 'status' column (PASS/FAIL) green/red if present — purely cosmetic."""
+    if "status" not in df.columns:
+        return df
+    def _color(v):
+        if v == "PASS":
+            return "color: #1a7f37; font-weight: 600"
+        if v == "FAIL":
+            return "color: #c0392b; font-weight: 600"
+        return ""
+    return df.style.map(_color, subset=["status"])
+
+
+def render_paginated_df(df, key_prefix: str, page_size_options=(10, 25, 50, 100), style_status: bool = True):
+    """Renders a DataFrame with page-size + page-number controls instead of
+    one long scrollable table. Returns nothing — renders directly."""
+    n_rows = len(df)
+    if n_rows == 0:
+        st.caption("No rows.")
+        return
+
+    pc1, pc2 = st.columns([1, 3])
+    with pc1:
+        page_size = st.selectbox(
+            "Rows per page", page_size_options,
+            index=min(1, len(page_size_options) - 1), key=f"{key_prefix}_page_size",
+        )
+    n_pages = max((n_rows + page_size - 1) // page_size, 1)
+    with pc2:
+        page = st.number_input(
+            f"Page (1–{n_pages})", min_value=1, max_value=n_pages, value=1, step=1,
+            key=f"{key_prefix}_page",
+        )
+    start, end = (page - 1) * page_size, min(page * page_size, n_rows)
+    st.caption(f"Showing rows {start + 1}–{end} of {n_rows}")
+
+    page_df = df.iloc[start:end]
+    st.dataframe(_style_status(page_df) if style_status else page_df, width='stretch', hide_index=True)
 
 
 # ---------------------------------------------------------------------------
@@ -685,6 +734,51 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
+    with st.expander("🔌 Connections", expanded=False):
+        _sidebar_registry = load_registry()
+        if not _sidebar_registry:
+            st.caption("No SRC_N_* connections found. Configure `.env` or run `python src/validate_cli.py setup`.")
+        else:
+            st.dataframe(
+                [
+                    {
+                        "Slot": f"SRC_{r['index']}",
+                        "Type": _DB_TYPE_LABELS.get(r["db_type"], r["db_type"]),
+                        "Host": r["host"],
+                        "Database": r["database"],
+                        "Schema": r["schema"],
+                    }
+                    for r in _sidebar_registry
+                ],
+                width='stretch', hide_index=True,
+            )
+
+        _sf = snowflake_creds()
+        st.caption(f"Snowflake target: **{_sf['database'] or 'not set'}**.{_sf['schema'] or 'not set'}")
+
+        if st.button("🔎 Test all connections", width='stretch'):
+            results = []
+            for rec in _sidebar_registry:
+                try:
+                    extractor = _make_source_extractor(rec)
+                    extractor.list_tables(rec["schema"])
+                    results.append((connection_label(rec), True, ""))
+                except Exception as exc:
+                    results.append((connection_label(rec), False, str(exc)))
+            try:
+                sf_ext = SnowflakeExtractor(database=_sf["database"])
+                sf_ext.list_tables(_sf["schema"])
+                results.append(("Snowflake (target)", True, ""))
+            except Exception as exc:
+                results.append(("Snowflake (target)", False, str(exc)))
+
+            for label, ok, err in results:
+                if ok:
+                    st.success(f"✓ {label}")
+                else:
+                    st.error(f"✗ {label} — {err}")
+
+    st.divider()
     st.caption("Token usage & cost for this session:")
     st.code("python token_usage_analysis/report_token_usage.py", language="bash")
 
@@ -696,63 +790,10 @@ with st.sidebar:
 st.title("Migration Validator")
 st.caption("PostgreSQL / MSSQL / Athena → Snowflake — pick everything from live dropdowns, powered by the credentials already in .env.")
 
-tab_conn, tab_single, tab_batch, tab_rules, tab_excl, tab_usage, tab_gemini, tab_review, tab_guide = st.tabs(
-    ["🔌 Connections", "▶️ Generate Single YAML", "📋 Generate Batch YAML", "📖 Rule Book",
-     "🚫 Exclusions", "📊 Usage & Cost", "🤖 Gemini Chat", "✅ Review & Approve", "📘 Guide"]
+tab_single, tab_batch, tab_execute, tab_history, tab_rules, tab_excl, tab_usage, tab_gemini, tab_review, tab_guide = st.tabs(
+    ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "🚀 Run Validation", "📈 History & Trends",
+     "📖 Rule Book", "🚫 Exclusions", "📊 Usage & Cost", "🤖 Gemini Chat", "✅ Review & Approve", "📘 Guide"]
 )
-
-# =============================================================================
-# TAB: Connections
-# =============================================================================
-with tab_conn:
-    st.subheader("Configured connections (read from .env — no setup needed here)")
-    registry = load_registry()
-
-    if not registry:
-        st.info("No SRC_N_* connections found. Configure `.env` or run `python src/validate_cli.py setup`.")
-    else:
-        rows = [
-            {
-                "Slot": f"SRC_{r['index']}",
-                "Type": _DB_TYPE_LABELS.get(r["db_type"], r["db_type"]),
-                "Host": r["host"],
-                "Database": r["database"],
-                "Schema": r["schema"],
-                "Username": r["username"],
-            }
-            for r in registry
-        ]
-        st.dataframe(rows, width='stretch', hide_index=True)
-
-    st.divider()
-    st.subheader("Snowflake target")
-    sf = snowflake_creds()
-    col1, col2 = st.columns(2)
-    col1.metric("Database", sf["database"] or "not set")
-    col2.metric("Schema", sf["schema"] or "not set")
-
-    st.divider()
-    if st.button("🔎 Test all connections"):
-        results = []
-        for rec in registry:
-            try:
-                extractor = _make_source_extractor(rec)
-                extractor.list_tables(rec["schema"])
-                results.append((connection_label(rec), True, ""))
-            except Exception as exc:
-                results.append((connection_label(rec), False, str(exc)))
-        try:
-            sf_ext = SnowflakeExtractor(database=sf["database"])
-            sf_ext.list_tables(sf["schema"])
-            results.append(("Snowflake (target)", True, ""))
-        except Exception as exc:
-            results.append(("Snowflake (target)", False, str(exc)))
-
-        for label, ok, err in results:
-            if ok:
-                st.success(f"✓ {label}")
-            else:
-                st.error(f"✗ {label} — {err}")
 
 # =============================================================================
 # TAB: Generate — Single YAML
@@ -1163,6 +1204,214 @@ with tab_batch:
                 st.success(f"Batch complete: {n_ok}/{len(results)} table(s) generated successfully.")
             else:
                 st.warning(f"Batch complete: {n_ok}/{len(results)} table(s) generated successfully — see failures above.")
+
+# =============================================================================
+# TAB: Run Validation — execute the generated YAMLs (Project/main.py) and
+# show pass/fail results, without ever displaying raw row values.
+# =============================================================================
+with tab_execute:
+    st.subheader("Run validation — pick the YAML file(s) to execute")
+    st.caption(
+        "Runs `Project/main.py` against the YAML configs generated in the tabs above, "
+        "then reads back the run's summary — counts and pass/fail status only."
+    )
+
+    top1, top2 = st.columns(2)
+    with top1:
+        layer = st.selectbox("Medallion layer", _LAYERS, index=0, key="exec_layer")
+    with top2:
+        environment = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="exec_env")
+
+    tables_by_type = list_configured_tables(layer)
+    count_tables = tables_by_type["count_validation"]
+    data_tables = tables_by_type["data_validation"]
+
+    if not count_tables and not data_tables:
+        st.warning(
+            f"No YAML configs found for layer '{layer}' yet — generate one first "
+            f"in the **Generate Single/Batch YAML** tabs."
+        )
+    else:
+        import pandas as pd
+
+        file_rows = [
+            {"Run": True, "Validation type": "count_validation",
+             "File": f"config/{layer}/count_validation/{layer}.yaml", "Table": t}
+            for t in count_tables
+        ] + [
+            {"Run": True, "Validation type": "data_validation",
+             "File": f"config/{layer}/data_validation/{t}.yaml", "Table": t}
+            for t in data_tables
+        ]
+        select_all = st.checkbox("Select all files", value=True, key="exec_select_all")
+        for row in file_rows:
+            row["Run"] = select_all
+        files_df = pd.DataFrame(file_rows)
+
+        st.caption(f"{len(files_df)} YAML file/table combination(s) for **{layer}** — check the ones to run, one file or many.")
+        # Key includes select_all so toggling it forces a fresh grid instead of
+        # keeping stale per-row edits from before the toggle (data_editor
+        # doesn't allow writing its state via st.session_state directly).
+        edited = st.data_editor(
+            files_df,
+            column_config={
+                "Run": st.column_config.CheckboxColumn(help="Include this file/table in the run"),
+                "Validation type": st.column_config.TextColumn(disabled=True),
+                "File": st.column_config.TextColumn(disabled=True),
+                "Table": st.column_config.TextColumn(disabled=True),
+            },
+            hide_index=True, width='stretch', key=f"exec_file_grid_{select_all}",
+        )
+
+        picked_count_tables = edited.loc[
+            (edited["Validation type"] == "count_validation") & edited["Run"], "Table"
+        ].tolist()
+        picked_data_tables = edited.loc[
+            (edited["Validation type"] == "data_validation") & edited["Run"], "Table"
+        ].tolist()
+        do_count = bool(picked_count_tables)
+        do_data = bool(picked_data_tables)
+        selected_tables = sorted(set(picked_count_tables) | set(picked_data_tables))
+
+        if selected_tables and set(picked_count_tables) != set(picked_data_tables) and do_count and do_data:
+            st.info(
+                "Count and data validation have different table selections — a table checked for only one "
+                "type will be silently skipped for the other (no matching YAML requested for it)."
+            )
+
+        if st.button("🚀 Run validation", type="primary", key="exec_run", disabled=not selected_tables):
+            with st.spinner(f"Running {layer} validation against '{environment}' — this executes real queries..."):
+                try:
+                    result = run_validation(layer, environment, selected_tables, do_count, do_data)
+                except Exception as exc:
+                    st.error(f"Execution failed to start: {exc}")
+                    result = None
+
+            if result:
+                if result["run_id"] and result["summaries"]:
+                    st.success(f"Run complete — run_id `{result['run_id']}`  ·  exit code {result['returncode']}")
+                elif result["run_id"]:
+                    st.error(
+                        f"Run `{result['run_id']}` finished (exit code {result['returncode']}) but produced no "
+                        f"summary — every table validation errored before completing. See log below."
+                    )
+                else:
+                    st.error("Run did not produce a run_id — see raw output below.")
+
+                for vtype, df in result["summaries"].items():
+                    with st.container(border=True):
+                        st.markdown(f"#### {'🔢' if vtype == 'count_validation' else '🧬'} {vtype.replace('_', ' ').title()} summary")
+                        n_total = len(df)
+                        n_pass = int((df["status"] == "PASS").sum())
+                        n_fail = n_total - n_pass
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Tables checked", n_total)
+                        m2.metric("Passed", n_pass)
+                        m3.metric("Failed", n_fail, delta=-n_fail if n_fail else None, delta_color="inverse")
+                        render_paginated_df(df, key_prefix=f"exec_summary_{vtype}")
+
+                if result["diff_files"]:
+                    with st.container(border=True):
+                        st.markdown("#### 🔍 Mismatch detail — row-level diffs")
+                        st.caption("Local files only — never sent to any AI/LLM.")
+                        for f in result["diff_files"]:
+                            try:
+                                diff_df = pd.read_csv(f)
+                                n_rows = len(diff_df)
+                            except Exception as exc:
+                                st.warning(f"Could not read `{f.name}`: {exc}")
+                                continue
+                            with st.expander(f"`{f.relative_to(_PROJECT_DIR)}` — {n_rows} mismatched row(s)", expanded=False):
+                                render_paginated_df(diff_df, key_prefix=f"exec_diff_{f.stem}", style_status=False)
+
+                if not result["summaries"]:
+                    with st.expander("Raw stdout/stderr (no summary was produced)", expanded=True):
+                        st.code(result["stdout_tail"] or "(empty)")
+                        if result["stderr_tail"]:
+                            st.code(result["stderr_tail"])
+                elif result["returncode"] != 0:
+                    with st.expander("Raw stdout/stderr (non-zero exit — some tables may have errored)", expanded=False):
+                        st.code(result["stdout_tail"] or "(empty)")
+                        if result["stderr_tail"]:
+                            st.code(result["stderr_tail"])
+
+# =============================================================================
+# TAB: History & Trends — SQLite-backed validation history (results_store.py),
+# populated automatically by every run in the Run Validation tab. Replaces
+# manually grepping through Project/output/<layer>/validation_<run_id>/ CSVs.
+# =============================================================================
+with tab_history:
+    st.subheader("Validation history")
+    st.caption("Every run from the Run Validation tab is recorded here — counts and pass/fail status only.")
+
+    hist_layer_choice = st.selectbox("Layer", ["All"] + list(_LAYERS), index=0, key="hist_layer")
+    hist_layer = None if hist_layer_choice == "All" else hist_layer_choice
+
+    runs_df = results_store.query_runs(layer=hist_layer, limit=50)
+    if runs_df.empty:
+        st.info("No runs recorded yet — run a validation in the **Run Validation** tab first.")
+    else:
+        total_checks = int(runs_df["checks"].sum())
+        total_passed = int(runs_df["passed"].sum())
+        total_failed = int(runs_df["failed"].sum())
+        pass_rate = round(100 * total_passed / total_checks, 1) if total_checks else 0
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Runs recorded", len(runs_df))
+        m2.metric("Total checks", total_checks)
+        m3.metric("Passed", total_passed)
+        m4.metric("Failed", total_failed, delta=-total_failed if total_failed else None, delta_color="inverse")
+        m5.metric("Pass rate", f"{pass_rate}%")
+
+        with st.container(border=True):
+            st.markdown("#### 🗂️ Recent runs")
+            render_paginated_df(
+                runs_df[["run_id", "layer", "environment", "returncode", "recorded_at", "checks", "passed", "failed"]],
+                key_prefix="hist_runs", style_status=False,
+            )
+
+        st.divider()
+        with st.container(border=True):
+            st.markdown("#### 📉 Drill down by table")
+            tables = results_store.distinct_tables(layer=hist_layer)
+            if not tables:
+                st.caption("No per-table results yet.")
+            else:
+                picked_table = st.selectbox("Table", tables, key="hist_table")
+                trend_df = results_store.table_trend(picked_table)
+                if not trend_df.empty:
+                    trend_df = trend_df.sort_values("run_at")
+                    c1, c2 = st.columns(2)
+                    c1.metric("Runs for this table", len(trend_df))
+                    c2.metric("Latest status", trend_df.iloc[-1]["status"])
+                    count_trend = trend_df.dropna(subset=["source_count", "target_count"])
+                    if not count_trend.empty:
+                        st.line_chart(
+                            count_trend.set_index("run_at")[["source_count", "target_count"]],
+                        )
+                    render_paginated_df(
+                        trend_df[["run_id", "validation_type", "status", "source_count", "target_count",
+                                  "count_difference", "run_at"]],
+                        key_prefix="hist_trend",
+                    )
+
+        st.divider()
+        with st.container(border=True):
+            st.markdown("#### 🔎 Filter all results")
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                status_filter = st.selectbox("Status", ["All", "PASS", "FAIL"], key="hist_status")
+            with f2:
+                vtype_filter = st.selectbox("Validation type", ["All", "count_validation", "data_validation"], key="hist_vtype")
+            with f3:
+                table_filter = st.selectbox("Table", ["All"] + tables, key="hist_table_filter")
+
+            results_df = results_store.query_results(
+                layer=hist_layer,
+                status=None if status_filter == "All" else status_filter,
+                validation_type=None if vtype_filter == "All" else vtype_filter,
+                table=None if table_filter == "All" else table_filter,
+            )
+            render_paginated_df(results_df, key_prefix="hist_results")
 
 # =============================================================================
 # TAB: Rule Book
@@ -1787,11 +2036,17 @@ with tab_review:
 
     st.divider()
 
-    # Layer selector is shared across every sub-tab below.
+    # Layer selector is shared across every sub-tab below. "All" aggregates
+    # across bronze/silver/gold in the UI — the underlying connector tools
+    # (get_migration_summary, get_coverage, list_plans) each take one real
+    # layer, so "All" just calls them once per layer and merges the results
+    # here rather than changing their documented single-layer contracts.
     layer_choice = st.selectbox(
-        "Medallion layer", ["bronze", "silver", "gold"], key="review_layer",
-        help="Filters everything below — pending items, coverage, plans, metrics — to this layer.",
+        "Medallion layer", ["All", "bronze", "silver", "gold"], key="review_layer",
+        help="Filters everything below — pending items, coverage, plans, metrics. "
+             "'All' aggregates across every layer.",
     )
+    _review_layers = list(_LAYERS) if layer_choice == "All" else [layer_choice]
 
     _needs_action_tab, _overview_tab, _audit_tab = st.tabs(
         ["🔴 Needs Your Action", "📊 Portfolio & Coverage", "📜 Audit Trail"]
@@ -1861,7 +2116,11 @@ with tab_review:
                     try:
                         from core.plan_store import PlanStore
                         plan_store = PlanStore()
-                        plan_obj = plan_store.load_for_table(r.table, layer_choice)
+                        plan_obj = None
+                        for _l in _review_layers:
+                            plan_obj = plan_store.load_for_table(r.table, _l)
+                            if plan_obj:
+                                break
                         if plan_obj:
                             mapping_entry = next(
                                 (m for m in plan_obj.mappings if m.source_column == r.source_column), None
@@ -1880,13 +2139,55 @@ with tab_review:
                     #    radio + generic "Submit" (which button does what was unclear) ──
                     st.markdown("**Your decision:**")
                     _draft_key = f"draft_action_{r.id}"
-                    b_approve, b_modify, b_reject = st.columns(3)
+                    b_approve, b_modify, b_reject, b_jira = st.columns(4)
                     if b_approve.button("✅ Approve", key=f"approve_btn_{r.id}", use_container_width=True):
                         st.session_state[_draft_key] = "Approve"
                     if b_modify.button("✏️ Modify", key=f"modify_btn_{r.id}", use_container_width=True):
                         st.session_state[_draft_key] = "Modify"
                     if b_reject.button("❌ Reject", key=f"reject_btn_{r.id}", use_container_width=True):
                         st.session_state[_draft_key] = "Reject"
+                    if b_jira.button("🎫 Jira", key=f"jira_btn_{r.id}", use_container_width=True,
+                                      help="Raise a Jira ticket for this mapping — doesn't change its approval status."):
+                        st.session_state[_draft_key] = "Jira"
+
+                    if st.session_state.get(_draft_key) == "Jira":
+                        from gemini_connector import jira_client
+                        if not jira_client.is_configured():
+                            st.warning(
+                                "Jira isn't configured — set JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN, "
+                                "JIRA_PROJECT_KEY in .env to enable this.", icon="🎫",
+                            )
+                        else:
+                            _jira_summary = st.text_input(
+                                "Ticket summary", key=f"jira_summary_{r.id}",
+                                value=f"[{layer_choice if layer_choice != 'All' else 'migration'}] "
+                                      f"Review mapping {r.table}.{r.source_column} → {r.target_column}",
+                            )
+                            _jira_desc = st.text_area(
+                                "Ticket description", key=f"jira_desc_{r.id}",
+                                value=(
+                                    f"Table: {r.table}\nColumn: {r.source_column} -> {r.target_column}\n"
+                                    f"Confidence: {int(r.confidence * 100)}%\nMatch method: {r.match_method or '-'}\n"
+                                    f"Rule: {r.transformation_rule or '-'}\n"
+                                    f"AI recommendation: {r.ai_recommendation or '-'}\n"
+                                    f"Raised by: {review_actor or '(not set)'} via Migration Validator Review & Approve."
+                                ),
+                                height=140,
+                            )
+                            if st.button("🎫 Create Jira ticket", key=f"jira_create_{r.id}", type="primary"):
+                                if not review_actor:
+                                    st.error("Enter your corporate email at the top before raising a ticket.", icon="⚠️")
+                                else:
+                                    try:
+                                        ticket = jira_client.create_ticket(
+                                            _jira_summary, _jira_desc,
+                                            labels=["migration-validator", r.table],
+                                        )
+                                        st.session_state.pop(_draft_key, None)
+                                        flash(f"Jira ticket {ticket['key']} created", icon="🎫")
+                                        st.success(f"Created [{ticket['key']}]({ticket['url']})", icon="🎫")
+                                    except jira_client.JiraError as exc:
+                                        st.error(f"Jira ticket creation failed: {exc}", icon="❌")
 
                     _action_verb = st.session_state.get(_draft_key)
                     new_target  = r.target_column
@@ -1921,7 +2222,7 @@ with tab_review:
                             height=80,
                         )
 
-                    if _action_verb:
+                    if _action_verb and _action_verb != "Jira":
                         _submit_label = {
                             "Approve": f"✅ Confirm approval — {r.table}.{r.source_column}",
                             "Modify":  f"✏️ Save modification — {r.table}.{r.source_column}",
@@ -1948,8 +2249,8 @@ with tab_review:
                                     st.rerun()
                                 else:
                                     st.error(f"Action failed: {res.get('message', 'unknown error')}", icon="❌")
-                    else:
-                        st.caption("Choose Approve, Modify, or Reject above to continue.")
+                    elif not _action_verb:
+                        st.caption("Choose Approve, Modify, Reject, or Jira above to continue.")
 
         st.divider()
 
@@ -1964,18 +2265,22 @@ with tab_review:
         try:
             from core.plan_store import PlanStore
             plan_store_r = PlanStore()
-            plan_paths = plan_store_r.list_plans(layer_choice)
+            # (path, actual_layer) pairs — "All" means several real layers, so
+            # each plan keeps track of which one it actually came from.
+            plan_entries = [
+                (path, _l) for _l in _review_layers for path in plan_store_r.list_plans(_l)
+            ]
 
-            if not plan_paths:
+            if not plan_entries:
                 st.info(f"No validation plans found in the **{layer_choice}** layer.", icon="ℹ️")
             else:
-                for path in plan_paths:
+                for path, _plan_layer in plan_entries:
                     try:
                         plan_obj = plan_store_r.load(path)
                     except Exception:
                         continue
 
-                    plan_id = f"plan/{layer_choice}/{plan_obj.source_table}"
+                    plan_id = f"plan/{_plan_layer}/{plan_obj.source_table}"
                     plan_rec = approval_store.get(plan_id)
                     plan_status = plan_rec.status if plan_rec else "not_submitted"
                     excl_s = plan_obj.exclusion_summary()
@@ -1986,8 +2291,9 @@ with tab_review:
                     }.get(plan_status, "🕐")
                     _plan_status_label = plan_status.replace("_", " ").title()
 
+                    _layer_tag = f" · {_plan_layer}" if layer_choice == "All" else ""
                     with st.expander(
-                        f"{_plan_status_icon} **{plan_obj.source_table}** → {plan_obj.target_table}  "
+                        f"{_plan_status_icon} **{plan_obj.source_table}** → {plan_obj.target_table}{_layer_tag}  "
                         f"| Coverage: {_cov}%  |  Approval: {_plan_status_label}",
                         expanded=(plan_status == "not_submitted"),
                     ):
@@ -2015,12 +2321,12 @@ with tab_review:
                         else:
                             plan_reason = st.text_input(
                                 "Approval note (optional — recorded in audit trail)",
-                                key=f"plan_reason_{plan_obj.source_table}",
+                                key=f"plan_reason_{_plan_layer}_{plan_obj.source_table}",
                                 placeholder="e.g. Reviewed DDL, warnings acknowledged, approved for bronze layer.",
                             )
                             if st.button(
                                 f"✅ Approve validation plan — {plan_obj.source_table}",
-                                key=f"approve_plan_{plan_obj.source_table}",
+                                key=f"approve_plan_{_plan_layer}_{plan_obj.source_table}",
                                 type="primary",
                                 use_container_width=True,
                             ):
@@ -2028,7 +2334,7 @@ with tab_review:
                                     st.error("Enter your corporate email at the top before approving.", icon="⚠️")
                                 else:
                                     from gemini_connector.tools import approve_plan
-                                    res = approve_plan(plan_obj.source_table, layer_choice, review_actor, plan_reason)
+                                    res = approve_plan(plan_obj.source_table, _plan_layer, review_actor, plan_reason)
                                     if res.get("status") == "ok":
                                         flash(f"Plan '{plan_obj.source_table}' approved by {review_actor}", icon="✅")
                                         st.rerun()
@@ -2041,35 +2347,41 @@ with tab_review:
     # SUB-TAB: Portfolio & Coverage — read-only analysis, not action items
     # =========================================================================
     with _overview_tab:
-        # ── Portfolio overview ───────────────────────────────────────────────
+        import pandas as pd
+
+        # ── Portfolio overview — merged across _review_layers when "All" ────
         st.markdown("### Portfolio Overview")
-        summary_result = get_migration_summary(layer=layer_choice)
+        _summaries = [(l, get_migration_summary(layer=l)) for l in _review_layers]
+        _summaries_ok = [(l, s) for l, s in _summaries if s.get("status") == "ok"]
+        total = sum(s.get("total_tables", 0) for _, s in _summaries_ok)
 
-        if summary_result.get("status") == "ok":
-            total = summary_result.get("total_tables", 0)
-            if total == 0:
-                st.info(f"No plans found in the **{layer_choice}** layer. Generate plans first using the Generate tabs.", icon="ℹ️")
-            else:
-                _avg_cov = summary_result.get("avg_coverage_pct", 0)
-                rc1, rc2, rc3, rc4 = st.columns(4)
-                rc1.metric("Total tables",    total)
-                rc2.metric("Complete",        summary_result.get("complete", 0))
-                rc3.metric("Needs attention", len(summary_result.get("tables_needing_attention", [])))
-                rc4.metric("Avg coverage",    f"{_avg_cov}%", delta="target: 100%", delta_color="off")
+        if total == 0:
+            st.info(f"No plans found in **{layer_choice}**. Generate plans first using the Generate tabs.", icon="ℹ️")
+        else:
+            complete = sum(s.get("complete", 0) for _, s in _summaries_ok)
+            attention = [
+                {**row, "Layer": l} for l, s in _summaries_ok for row in s.get("tables_needing_attention", [])
+            ]
+            # Weighted average coverage across layers, not a plain mean of means.
+            _weighted = sum(s.get("avg_coverage_pct", 0) * s.get("total_tables", 0) for _, s in _summaries_ok)
+            _avg_cov = round(_weighted / total, 1) if total else 0
 
-                if _avg_cov < 100:
-                    st.progress(int(_avg_cov), text=f"Coverage {_avg_cov}% across {total} table(s)")
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            rc1.metric("Total tables",    total)
+            rc2.metric("Complete",        complete)
+            rc3.metric("Needs attention", len(attention))
+            rc4.metric("Avg coverage",    f"{_avg_cov}%", delta="target: 100%", delta_color="off")
 
-                attention = summary_result.get("tables_needing_attention", [])
-                if attention:
-                    with st.expander(f"⚠ {len(attention)} table(s) need attention — click to expand", expanded=True):
-                        import pandas as pd
-                        att_df = pd.DataFrame(attention)
-                        st.dataframe(att_df, use_container_width=True, hide_index=True)
+            if _avg_cov < 100:
+                st.progress(int(_avg_cov), text=f"Coverage {_avg_cov}% across {total} table(s)")
+
+            if attention:
+                with st.expander(f"⚠ {len(attention)} table(s) need attention — click to expand", expanded=True):
+                    st.dataframe(pd.DataFrame(attention), width='stretch', hide_index=True)
 
         st.divider()
 
-        # ── Coverage report ──────────────────────────────────────────────────
+        # ── Coverage report — merged across _review_layers when "All" ──────
         st.markdown("### Coverage Report")
         cov_col1, cov_col2 = st.columns([2, 1])
         cov_threshold = cov_col1.slider(
@@ -2078,25 +2390,31 @@ with tab_review:
         )
         try:
             from gemini_connector.tools import get_coverage
-            cov_result = get_coverage(layer=layer_choice, threshold=float(cov_threshold))
-            if cov_result.get("status") == "ok":
-                total_cov = cov_result.get("total_tables", 0)
-                below_cov = cov_result.get("below_threshold", 0)
+            _cov_results = [(l, get_coverage(layer=l, threshold=float(cov_threshold))) for l in _review_layers]
+            _cov_results_ok = [(l, c) for l, c in _cov_results if c.get("status") == "ok"]
+
+            if not _cov_results_ok:
+                st.warning("Coverage query failed for every layer.")
+            else:
+                total_cov = sum(c.get("total_tables", 0) for _, c in _cov_results_ok)
+                below_cov = sum(c.get("below_threshold", 0) for _, c in _cov_results_ok)
                 cov_col2.metric(
                     f"Below {cov_threshold}%", below_cov,
                     delta=f"of {total_cov} total",
                     delta_color="inverse",
                 )
-                cov_rows = cov_result.get("coverage_rows", [])
+                cov_rows = [
+                    {**r, "layer": l} for l, c in _cov_results_ok for r in c.get("coverage_rows", [])
+                ]
                 if not cov_rows:
                     st.success(
                         f"All {total_cov} tables in '{layer_choice}' meet or exceed {cov_threshold}% coverage.",
                         icon="✅",
                     )
                 else:
-                    import pandas as pd
                     cov_df = pd.DataFrame([
                         {
+                            **({"Layer": r["layer"]} if layer_choice == "All" else {}),
                             "Table":          r["table"],
                             "Source system":  r["source_system"],
                             "Target":         r["target"],
@@ -2108,13 +2426,8 @@ with tab_review:
                         for r in cov_rows
                     ])
                     st.dataframe(cov_df, width="stretch", hide_index=True)
-                    if cov_result.get("has_more"):
-                        st.caption(
-                            f"Showing page {cov_result['page']} of {cov_result['total_pages']} "
-                            f"({below_cov} tables total below threshold)."
-                        )
-            else:
-                st.warning(f"Coverage query failed: {cov_result.get('message', '')}")
+                    if any(c.get("has_more") for _, c in _cov_results_ok):
+                        st.caption(f"{below_cov} table(s) total below threshold across {len(_review_layers)} layer(s) — some layers paginated, showing first page each.")
         except Exception as _cov_exc:
             st.caption(f"Coverage tool unavailable: {_cov_exc}")
 

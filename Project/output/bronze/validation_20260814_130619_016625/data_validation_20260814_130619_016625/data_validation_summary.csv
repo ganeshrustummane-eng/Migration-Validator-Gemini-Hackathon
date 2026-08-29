@@ -1,2 +1,0 @@
-run_id,run_at,validation_performed,source_table_name,source_type,target_table_name,target_type,source_count,missing_in_source,target_count,missing_in_target,status,output_file_path,batch_start_time,batch_end_time,total_time_taken
-20260814_130619_016625,14-Aug-2026 13:06:19.016638,data_validation,general_ledger_line_items,postgresql,general_ledger_line_items,snowflake,6,0,6,0,PASS,,13:06:19,13:06:24,00:00:05

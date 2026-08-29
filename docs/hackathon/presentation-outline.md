@@ -153,7 +153,7 @@ SQL Generation → Execution
 
 **Zero credential exposure:** Gemini receives tool results — never passwords, connection strings, or API keys.
 
-**Test coverage:** 31 security tests (authentication, authorization, versioning, audit, secret leakage).
+**Test coverage:** 34 security tests (authentication, authorization, versioning, audit, secret leakage).
 
 ---
 
@@ -168,7 +168,7 @@ SQL Generation → Execution
 | Columns auto-mapped | 100% (events table — strong schema naming) |
 | Manual SQL queries avoided | 4 per table |
 | Plan generation time | < 30 seconds |
-| Security tests passing | 31/31 |
+| Security tests passing | 34/34 |
 | Credential leakage detected | 0 |
 
 **Scale projection** *(illustrative)*:

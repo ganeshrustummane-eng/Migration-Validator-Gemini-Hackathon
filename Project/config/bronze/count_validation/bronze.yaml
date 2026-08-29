@@ -21,11 +21,11 @@ tables:
         sourcequery: |
           SELECT COUNT(*) AS source_row_count
           FROM public.events;
-        target_table_name: events
+        target_table_name: EVENTS
         target: snowflake
         targetquery: |
           SELECT COUNT(*) AS target_row_count
-          FROM dev_edge_bronze.storedge_fms_public.events
+          FROM dev_edge_bronze.storedge_fms_public.EVENTS
           WHERE _FIVETRAN_ACTIVE = TRUE;
   AcctSoftware:
     validations:

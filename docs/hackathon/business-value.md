@@ -34,7 +34,7 @@ Enterprise database migrations at scale typically involve:
 | Audit records per approval action | 1 | Append-only, immutable |
 | Concurrent write conflicts detected | 100% | VersionConflictError correctly raised |
 | Credential leakage in API responses | 0 | All 3 secret leakage tests pass |
-| Security test pass rate | 31/31 | 100% |
+| Security test pass rate | 34/34 | 100% |
 
 ---
 

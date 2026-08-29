@@ -78,12 +78,6 @@ class AuthProvider(ABC):
 # JWTAuthProvider  (production / staging)
 # ---------------------------------------------------------------------------
 
-_JWT_SECRET   = os.getenv("JWT_SECRET", "")
-_JWT_ISSUER   = os.getenv("JWT_ISSUER", "")
-_JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "")
-_JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-
-
 class JWTAuthProvider(AuthProvider):
     """
     Validates signed JWT access tokens.
@@ -101,15 +95,20 @@ class JWTAuthProvider(AuthProvider):
 
     def __init__(
         self,
-        secret: str = _JWT_SECRET,
-        algorithm: str = _JWT_ALGORITHM,
-        issuer: Optional[str] = _JWT_ISSUER or None,
-        audience: Optional[str] = _JWT_AUDIENCE or None,
+        secret: Optional[str] = None,
+        algorithm: Optional[str] = None,
+        issuer: Optional[str] = None,
+        audience: Optional[str] = None,
     ):
-        self._secret    = secret
-        self._algorithm = algorithm
-        self._issuer    = issuer
-        self._audience  = audience
+        # Read env vars fresh here, not as module-level/default-argument
+        # constants — those are evaluated once at import time and silently
+        # ignore any later os.environ change (real deployments where this
+        # module gets imported before .env loads elsewhere, and tests using
+        # unittest.mock.patch.dict, both break with eager module-level reads).
+        self._secret    = secret if secret is not None else os.getenv("JWT_SECRET", "")
+        self._algorithm = algorithm if algorithm is not None else os.getenv("JWT_ALGORITHM", "HS256")
+        self._issuer    = issuer if issuer is not None else (os.getenv("JWT_ISSUER", "") or None)
+        self._audience  = audience if audience is not None else (os.getenv("JWT_AUDIENCE", "") or None)
 
     def verify(self, token: str) -> AuthResult:
         try:
@@ -184,10 +183,6 @@ class JWTAuthProvider(AuthProvider):
 # StaticTokenProvider  (hackathon / CI)
 # ---------------------------------------------------------------------------
 
-_STATIC_TOKEN = os.getenv("CONNECTOR_API_TOKEN", "")
-_STATIC_ROLES = [r.strip() for r in os.getenv("CONNECTOR_ROLES", "ADMIN").split(",") if r.strip()]
-
-
 class StaticTokenProvider(AuthProvider):
     """
     Validates a pre-shared static bearer token.
@@ -201,11 +196,13 @@ class StaticTokenProvider(AuthProvider):
 
     def __init__(
         self,
-        token: str = _STATIC_TOKEN,
-        roles: List[str] = _STATIC_ROLES,
+        token: Optional[str] = None,
+        roles: Optional[List[str]] = None,
     ):
-        self._token = token
-        self._roles = roles
+        self._token = token if token is not None else os.getenv("CONNECTOR_API_TOKEN", "")
+        self._roles = roles if roles is not None else [
+            r.strip() for r in os.getenv("CONNECTOR_ROLES", "ADMIN").split(",") if r.strip()
+        ]
 
     def verify(self, token: str) -> AuthResult:
         if not self._token:
@@ -259,9 +256,6 @@ class DevAuthProvider(AuthProvider):
 # Factory
 # ---------------------------------------------------------------------------
 
-_AUTH_MODE = os.getenv("AUTH_MODE", "static").lower()
-
-
 def get_auth_provider() -> AuthProvider:
     """
     Return the configured authentication provider.
@@ -271,9 +265,10 @@ def get_auth_provider() -> AuthProvider:
       "static" → StaticTokenProvider  (hackathon / CI)
       "dev"    → DevAuthProvider  (local dev, no validation)
     """
-    if _AUTH_MODE == "jwt":
+    auth_mode = os.getenv("AUTH_MODE", "static").lower()
+    if auth_mode == "jwt":
         return JWTAuthProvider()
-    if _AUTH_MODE == "dev":
+    if auth_mode == "dev":
         return DevAuthProvider()
     return StaticTokenProvider()
 

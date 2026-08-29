@@ -94,7 +94,7 @@ Complete each item before final submission. Check the box when done.
 ## Security
 
 - [ ] `demo_security.py` runs all 4 demos successfully
-- [ ] `pytest tests/test_security.py -v` shows 31/31 passing
+- [ ] `pytest tests/test_security.py -v` shows 34/34 passing
 - [ ] `GET /health` response contains no credentials
 - [ ] `POST /tools/discover_connections` response contains no passwords
 - [ ] `POST /tools/get_migration_summary` response contains no secrets
