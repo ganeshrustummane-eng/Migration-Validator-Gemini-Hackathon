@@ -244,18 +244,17 @@ def chat(request: ChatRequest, req: Request):
     Read-only operations are open; write actions still require the actor to
     have appropriate permissions when the tool routes through /tools.
     """
-    from gemini_connector.gemini_agent import GeminiAgent
+    from gemini_connector.gemini_agent import GeminiAgent, is_gemini_configured
 
     session_key = request.actor or "default"
     if session_key not in _agent_cache or request.reset:
         _agent_cache[session_key] = GeminiAgent()
 
     agent: GeminiAgent = _agent_cache[session_key]
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
 
     result = (
         agent.chat(request.message, actor=request.actor)
-        if api_key
+        if is_gemini_configured()
         else agent.chat_offline(request.message)
     )
     return {

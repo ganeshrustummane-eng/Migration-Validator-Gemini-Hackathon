@@ -419,24 +419,24 @@ class TextRule(BaseValidationRule):
 
 
 class UUIDRule(BaseValidationRule):
-    """UUID: TRIM(CAST AS TEXT), case preserved as stored. NULL→'<<NULL>>'."""
+    """UUID: UPPER(TRIM(CAST AS TEXT)) — case-insensitive per RFC 4122. NULL→'<<NULL>>'."""
 
     @property
     def rule_name(self) -> str: return "uuid"
 
     @property
     def description(self) -> str:
-        return "UUID: TRIM only, case preserved. Handles PG UUID→SF VARCHAR/STRING. NULL→'<<NULL>>'."
+        return "UUID: UPPER(TRIM()), case-insensitive comparison. Handles PG UUID→SF VARCHAR/STRING. NULL→'<<NULL>>'."
 
     @property
     def trigger_pairs(self) -> List[Tuple[str, str]]:
         return [("UUID", "TEXT"), ("UUID", "VARCHAR"),
                 ("UUID", "STRING"), ("UUID", "UUID")]
 
-    def _pg_expression(self, col: str) -> str: return f"TRIM(CAST({col} AS TEXT))"
-    def _sf_expression(self, col: str) -> str: return f"TRIM(CAST({col} AS STRING))"
-    def _ms_expression(self, col: str) -> str: return f"LTRIM(RTRIM(CAST({col} AS VARCHAR(MAX))))"
-    def _athena_expression(self, col: str) -> str: return f"TRIM(CAST({col} AS VARCHAR))"
+    def _pg_expression(self, col: str) -> str: return f"UPPER(TRIM(CAST({col} AS TEXT)))"
+    def _sf_expression(self, col: str) -> str: return f"UPPER(TRIM(CAST({col} AS STRING)))"
+    def _ms_expression(self, col: str) -> str: return f"UPPER(LTRIM(RTRIM(CAST({col} AS VARCHAR(MAX)))))"
+    def _athena_expression(self, col: str) -> str: return f"UPPER(TRIM(CAST({col} AS VARCHAR)))"
 
 
 class JSONRule(BaseValidationRule):
@@ -486,19 +486,32 @@ class JSONRule(BaseValidationRule):
     def _pg_expression(self, col: str) -> str:
         # Recursive CTE that flattens a JSONB document into sorted path=value pairs.
         # jsonb_typeof() lets us distinguish objects, arrays, scalars, and null.
-        # array_agg(... ORDER BY path) produces a deterministic, sorted result.
+        #
+        # PostgreSQL only allows a recursive CTE's recursive term to reference
+        # itself (_jf) exactly once in its FROM clause — an earlier version of
+        # this rule split object-traversal and array-traversal into two
+        # separate "FROM _jf" branches joined by UNION ALL, which Postgres
+        # rejects outright ("recursive reference ... must not appear within
+        # its non-recursive term" / "... more than once"). The single LATERAL
+        # subquery below unifies both traversal cases behind one "FROM _jf",
+        # satisfying that restriction. Verified directly against Postgres —
+        # this used to fail to parse at all, silently making JSON/JSONB
+        # validation unusable for every table that hit this rule.
         return (
             f"(WITH RECURSIVE _jf(path, val) AS ("
             f"SELECT k, v "
             f"FROM jsonb_each({col}::jsonb) AS t(k, v) "
             f"UNION ALL "
-            f"SELECT _jf.path || '.' || t.k, t.v "
-            f"FROM _jf, jsonb_each(_jf.val) AS t(k, v) "
-            f"WHERE jsonb_typeof(_jf.val) = 'object' "
-            f"UNION ALL "
-            f"SELECT _jf.path || '[' || t.ord::text || ']', t.v "
-            f"FROM _jf, jsonb_array_elements(_jf.val) WITH ORDINALITY AS t(v, ord) "
-            f"WHERE jsonb_typeof(_jf.val) = 'array' "
+            f"SELECT "
+            f"  CASE WHEN jsonb_typeof(_jf.val) = 'object' THEN _jf.path || '.' || kv.k "
+            f"       ELSE _jf.path || '[' || kv.k || ']' END, "
+            f"  kv.v "
+            f"FROM _jf, LATERAL ("
+            f"  SELECT key AS k, value AS v FROM jsonb_each(_jf.val) WHERE jsonb_typeof(_jf.val) = 'object' "
+            f"  UNION ALL "
+            f"  SELECT ord::text AS k, v FROM jsonb_array_elements(_jf.val) WITH ORDINALITY AS t(v, ord) WHERE jsonb_typeof(_jf.val) = 'array' "
+            f") AS kv(k, v) "
+            f"WHERE jsonb_typeof(_jf.val) IN ('object','array') "
             f") "
             f"SELECT COALESCE("
             f"  CASE WHEN {col} IS NULL THEN NULL "
@@ -522,6 +535,17 @@ class JSONRule(BaseValidationRule):
         # PATH gives the dotted/bracketed path; VALUE is the leaf VARIANT cell.
         # TYPEOF() distinguishes datatypes; IS_NULL_VALUE() detects JSON null vs SQL NULL.
         # Pairs are sorted and concatenated via LISTAGG.
+        #
+        # NOTE: Snowflake rejects this as a correlated scalar subquery
+        # ("Unsupported subquery type cannot be evaluated") when {col} is a
+        # column reference from an enclosing query — LATERAL FLATTEN can't be
+        # used inside a scalar subquery that correlates to an outer row this
+        # way. This form only works when {col} is NOT correlated (e.g. a
+        # literal, or already resolved). For the normal case — generating one
+        # column's comparison expression inside a table's full SELECT list —
+        # use apply_snowflake_correlated() instead, which works around this
+        # via an explicit self-join rather than an implicit correlated
+        # reference. Verified against a live Snowflake instance.
         return (
             f"(SELECT COALESCE("
             f"  CASE WHEN {col} IS NULL THEN NULL "
@@ -531,13 +555,12 @@ class JSONRule(BaseValidationRule):
             f"         SELECT LISTAGG("
             f"           f.path || '=' || "
             f"             CASE WHEN IS_NULL_VALUE(f.value) THEN 'null' "
-            f"                  WHEN TYPEOF(f.value) = 'TEXT'    THEN '\"' || f.value::STRING || '\"' "
+            f"                  WHEN TYPEOF(f.value) = 'VARCHAR'    THEN '\"' || f.value::STRING || '\"' "
             f"                  WHEN TYPEOF(f.value) = 'BOOLEAN' THEN f.value::STRING "
             f"                  ELSE f.value::STRING END, "
             f"           '|') WITHIN GROUP (ORDER BY f.path) "
             f"         FROM LATERAL FLATTEN(INPUT => PARSE_JSON(CAST({col} AS STRING)), RECURSIVE => TRUE) f "
             f"         WHERE TYPEOF(f.value) NOT IN ('OBJECT', 'ARRAY') "
-            f"           AND NOT IS_NULL_VALUE(f.value) OR IS_NULL_VALUE(f.value) "
             f"       ) END, '<<EMPTY>>')"
             f")"
         )
@@ -550,6 +573,33 @@ class JSONRule(BaseValidationRule):
 
     def _athena_expression(self, col: str) -> str:
         return f"CAST({col} AS VARCHAR)"
+
+    def apply_snowflake_correlated(self, col: str, table_fqn: str, pk_col: str, alias: Optional[str] = None) -> str:
+        """Same canonical flattening as apply_snowflake(), but as a scalar
+        subquery correlated via an explicit self-join on pk_col instead of a
+        direct outer-column reference inside LATERAL FLATTEN — Snowflake
+        rejects the latter ("Unsupported subquery type cannot be evaluated").
+        Use this when generating the column's expression inside a table's
+        full SELECT list (the outer query must reference the same table,
+        unaliased or aliased consistently with table_fqn/pk_col below); use
+        apply_snowflake() only where col is already an uncorrelated value.
+        Verified against a live Snowflake instance.
+        """
+        expr = (
+            f"(SELECT LISTAGG("
+            f"    f.path || '=' || "
+            f"      CASE WHEN IS_NULL_VALUE(f.value) THEN 'null' "
+            f"           WHEN TYPEOF(f.value) = 'VARCHAR'    THEN '\"' || f.value::STRING || '\"' "
+            f"           WHEN TYPEOF(f.value) = 'BOOLEAN' THEN f.value::STRING "
+            f"           ELSE f.value::STRING END, "
+            f"    '|') WITHIN GROUP (ORDER BY f.path) "
+            f" FROM {table_fqn} AS _flt, "
+            f"   LATERAL FLATTEN(INPUT => PARSE_JSON(CAST(_flt.{col} AS STRING)), RECURSIVE => TRUE) f "
+            f" WHERE _flt.{pk_col} = {table_fqn}.{pk_col} "
+            f"   AND TYPEOF(f.value) NOT IN ('OBJECT', 'ARRAY'))"
+        )
+        wrapped = f"COALESCE(CAST({expr} AS STRING), '{NULL_PLACEHOLDER}')"
+        return f"{wrapped} AS {alias}" if alias else wrapped
 
 
 class ByteaRule(BaseValidationRule):
@@ -631,6 +681,11 @@ class HStoreRule(BaseValidationRule):
     def _sf_expression(self, col: str) -> str:
         # Fivetran stores hstore as a JSON string in Snowflake.
         # LATERAL FLATTEN produces one row per key; LISTAGG sorts and joins them.
+        #
+        # NOTE: same limitation as JSONRule — Snowflake rejects this as a
+        # correlated scalar subquery when {col} is an outer-row reference.
+        # Use apply_snowflake_correlated() when generating this column's
+        # expression inside a table's full SELECT list.
         return (
             f"(SELECT COALESCE("
             f"  CASE WHEN {col} IS NULL THEN NULL "
@@ -650,6 +705,19 @@ class HStoreRule(BaseValidationRule):
 
     def _athena_expression(self, col: str) -> str:
         return f"CAST({col} AS VARCHAR)"
+
+    def apply_snowflake_correlated(self, col: str, table_fqn: str, pk_col: str, alias: Optional[str] = None) -> str:
+        """Same canonical flattening as apply_snowflake(), but correlated via
+        an explicit self-join on pk_col — see JSONRule.apply_snowflake_correlated
+        for why. Verified against a live Snowflake instance."""
+        expr = (
+            f"(SELECT LISTAGG(f.key || '=' || f.value::STRING, '|') WITHIN GROUP (ORDER BY f.key) "
+            f" FROM {table_fqn} AS _flt, "
+            f"   LATERAL FLATTEN(INPUT => PARSE_JSON(CAST(_flt.{col} AS STRING))) f "
+            f" WHERE _flt.{pk_col} = {table_fqn}.{pk_col})"
+        )
+        wrapped = f"COALESCE(CAST({expr} AS STRING), '{NULL_PLACEHOLDER}')"
+        return f"{wrapped} AS {alias}" if alias else wrapped
 
 
 class NullPlaceholderRule(BaseValidationRule):
