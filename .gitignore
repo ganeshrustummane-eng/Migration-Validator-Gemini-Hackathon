@@ -17,10 +17,21 @@ build/
 # Reports
 validation_reports/
 
-# Project/main.py run artifacts (logs, per-run CSVs, results DB) — generated,
-# grows unbounded, and per-table diff CSVs can carry real row values.
-# (root output/ is intentionally tracked — connector demo evidence.)
+# Runtime output — generated, grows unbounded, may contain real row values
+output/
 Project/output/
+
+# Token usage logs — runtime telemetry, not source
+token_usage_analysis/logs/*.jsonl
+
+# Generated analytics dumps from CodeMie / DIAL
+docs/codemie/analytics/
+
+# Ephemeral model probe cache
+.dial_model_cache.json
+
+# Presentation artifacts
+presentation/
 
 # IDE
 .vscode/settings.json
