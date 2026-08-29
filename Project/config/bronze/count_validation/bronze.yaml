@@ -55,3 +55,17 @@ tables:
           SELECT COUNT(*) AS target_row_count
           FROM DEV_SITELINK_BRONZE.AWSDEV_DEVT5000_DBO.ADDRESSES
           WHERE _FIVETRAN_ACTIVE = TRUE;
+  migration_test:
+    validations:
+      count_validation:
+        source_table_name: migration_test
+        source: postgresql
+        sourcequery: |
+          SELECT COUNT(*) AS source_row_count
+          FROM public.migration_test;
+        target_table_name: MIGRATION_TEST
+        target: snowflake
+        targetquery: |
+          SELECT COUNT(*) AS target_row_count
+          FROM dev_edge_bronze.storedge_fms_public.MIGRATION_TEST
+          WHERE _FIVETRAN_ACTIVE = TRUE;

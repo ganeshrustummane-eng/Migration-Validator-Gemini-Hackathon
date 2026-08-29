@@ -10,12 +10,12 @@
     "database": "dev_edge_bronze",
     "db_type": "snowflake",
     "schema": "storedge_fms_public",
-    "table": "migration_test"
+    "table": "MIGRATION_TEST"
   },
   "source_table": "fms.public.migration_test",
-  "target_table": "dev_edge_bronze.storedge_fms_public.migration_test",
+  "target_table": "dev_edge_bronze.storedge_fms_public.MIGRATION_TEST",
   "status": "complete",
-  "generated_at": "2026-08-27T17:56:18.650674",
+  "generated_at": "2026-08-29T12:32:45.266769",
   "generated_by": "ai",
   "model_used": "gpt-4o",
   "ai_calls_made": 0,
