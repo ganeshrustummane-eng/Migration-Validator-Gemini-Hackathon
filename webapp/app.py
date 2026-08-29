@@ -1829,7 +1829,15 @@ st.markdown("""
 .st-key-gemini_chat_panel {
     position: fixed !important; bottom: 100px !important; right: 24px !important;
     z-index: 9999 !important; left: auto !important;
-    width: 400px !important; max-width: 92vw; max-height: 70vh; overflow-y: auto;
+    /* Sized, not locked: a starting width/height that the user can then drag from
+       the bottom-right corner (native CSS resize handle) instead of being stuck
+       with a fixed 400px box. `resize` needs a non-visible `overflow` to render
+       the handle, and the size values below must NOT be `!important` or the
+       browser's own resize-driven inline style can never override them. */
+    width: 400px; height: 520px;
+    min-width: 320px; min-height: 300px;
+    max-width: 92vw; max-height: 90vh;
+    resize: both; overflow: auto;
     background: var(--background-color, white); border-radius: 16px;
     box-shadow: 0 10px 32px rgba(0,0,0,0.28); padding: 0;
     border: 1px solid rgba(128,128,128,0.2);
