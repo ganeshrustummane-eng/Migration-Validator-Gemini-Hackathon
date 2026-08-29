@@ -110,7 +110,7 @@ gcloud run deploy migration-connector \
   --platform managed \
   --region YOUR_REGION \
   --allow-unauthenticated \
-  --set-env-vars AUTH_MODE=static,CONNECTOR_ROLES=ADMIN,SNOWFLAKE_ACCOUNT=your-account,SNOWFLAKE_USERNAME=your-user,SNOWFLAKE_WAREHOUSE=your-warehouse,SNOWFLAKE_ROLE=your-role,SRC_1_DB_TYPE=postgresql,SRC_1_HOST=your-postgres-host,SRC_1_PORT=5432,SRC_1_USERNAME=your-user \
+  --set-env-vars AUTH_MODE=static,CONNECTOR_ROLES=ADMIN,SNOWFLAKE_ACCOUNT=your-account,SNOWFLAKE_USERNAME=your-user,SNOWFLAKE_WAREHOUSE=your-warehouse,SNOWFLAKE_ROLE=your-role,SRC_1_TYPE=postgresql,SRC_1_HOST=your-postgres-host,SRC_1_PORT=5432,SRC_1_USERNAME=your-user \
   --set-secrets GOOGLE_API_KEY=GOOGLE_API_KEY:latest,CONNECTOR_API_TOKEN=CONNECTOR_API_TOKEN:latest,SNOWFLAKE_PASSWORD=SNOWFLAKE_PASSWORD:latest,SRC_1_PASSWORD=SRC_1_PASSWORD:latest
 ```
 

@@ -798,6 +798,24 @@ Generate the complete SELECT query now:
         dialect = db_type.lower().replace("server", "")
         if not re.search(r"\bSELECT\b", upper) or not re.search(r"\bFROM\b", upper):
             warnings.append("AI response is not a complete SELECT query")
+
+        # These generated queries are read-only validation SELECTs by design. The AI
+        # backend is an external dependency and its output must never be trusted to
+        # be inert — reject anything containing a destructive/DDL/DML keyword or a
+        # second statement (stacked via `;`), rather than letting it through with a
+        # lower confidence score. Any non-empty warning here already forces a retry
+        # and, after exhausting attempts, a hard failure — see the calling loop.
+        destructive = re.findall(
+            r"\b(DROP|DELETE|INSERT|UPDATE|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|EXEC|EXECUTE|MERGE|CALL)\b",
+            upper,
+        )
+        if destructive:
+            warnings.append(
+                f"AI response contains forbidden non-SELECT keyword(s): {sorted(set(destructive))}"
+            )
+        stripped = query.strip().rstrip(";")
+        if ";" in stripped:
+            warnings.append("AI response contains multiple statements (unexpected ';')")
         if dialect in {"mssql", "sqlserver"}:
             forbidden = {
                 r"::\s*[A-Z_]": "PostgreSQL cast operator (::)",
