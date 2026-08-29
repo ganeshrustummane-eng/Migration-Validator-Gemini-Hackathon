@@ -533,17 +533,33 @@ Rules:
                 f"Raw response (first 500 chars): {raw_json[:500]}"
             ) from exc
 
+        # Grounding check: the AI response is free text and must never be trusted to
+        # invent identifiers. Only column names that actually exist in the schema we
+        # sent may pass through — anything else could be a hallucination or an
+        # injected instruction riding along in the model output, and these names
+        # get interpolated directly into generated SQL downstream.
+        known_source = {c.column_name.lower() for c in source_cols}
+        known_target = {c.column_name.lower() for c in target_cols}
+
         mappings: List[ColumnRuleMapping] = []
+        rejected: List[str] = []
         explanation = data.get("explanation", "")
 
         for item in data.get("column_mappings", []):
+            src_col = item.get("source_column", "")
+            tgt_col = item.get("target_column", "")
+
+            if src_col.lower() not in known_source or tgt_col.lower() not in known_target:
+                rejected.append(f"{src_col} -> {tgt_col}")
+                continue
+
             src_type = item.get("source_type", "text")
             tgt_type = item.get("target_type", "text")
             rule     = get_rule_for_type(src_type, tgt_type)
 
             mappings.append(ColumnRuleMapping(
-                source_column   = item["source_column"],
-                target_column   = item["target_column"],
+                source_column   = src_col,
+                target_column   = tgt_col,
                 source_type     = src_type,
                 target_type     = tgt_type,
                 rule            = rule,
@@ -552,6 +568,13 @@ Rules:
                 skip_reason     = item.get("skip_reason", ""),
                 matched_by      = "ai",
             ))
+
+        if rejected:
+            print(
+                f"  [AIRuleMapper] ⚠ rejected {len(rejected)} AI-proposed mapping(s) "
+                f"referencing unknown columns (not present in source/target schema): "
+                f"{rejected}"
+            )
 
         active  = sum(1 for m in mappings if not m.skip_validation)
         skipped = sum(1 for m in mappings if m.skip_validation)

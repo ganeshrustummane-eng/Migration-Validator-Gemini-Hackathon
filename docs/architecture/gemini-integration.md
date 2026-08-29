@@ -284,3 +284,72 @@ DIAL_API_BASE=https://ai-proxy.lab.epam.com
 DIAL_API_VERSION=2025-04-01-preview
 DIAL_MODEL=gpt-4o
 ```
+
+---
+
+## Register as a Gemini Extension
+
+This section documents how the deployed connector (Cloud Run service `migration-connector`)
+is registered with **Gemini Enterprise** (Discovery Engine / Agentspace), distinct from the
+classic Gemini API integration (`GeminiAgent`) described above.
+
+### Deployed Endpoint
+
+```
+Connector URL   : https://migration-connector-877936790636.us-central1.run.app
+OpenAPI spec    : https://migration-connector-877936790636.us-central1.run.app/openapi.json
+Tool list       : https://migration-connector-877936790636.us-central1.run.app/tools  (24 tools)
+Health check    : https://migration-connector-877936790636.us-central1.run.app/health
+```
+
+FastAPI auto-generates a full OpenAPI 3.1 document at `/openapi.json` — this is the artifact
+Gemini Enterprise's custom connector/action registration consumes to discover available
+operations, request/response schemas, and parameters. No hand-written spec is required.
+
+### Two-Layer Authentication
+
+Access to this connector is gated at two independent layers:
+
+1. **Cloud Run IAM (transport layer).** The service does not use `--allow-unauthenticated`
+   (blocked by this project's org policy). Instead, `roles/run.invoker` is granted directly to
+   the Discovery Engine service agent that Gemini Enterprise calls through:
+
+   ```
+   serviceAccount:service-71784361107@gcp-sa-discoveryengine.iam.gserviceaccount.com
+   ```
+
+   This binding is present at both the **project level** (pre-provisioned for this
+   integration) and explicitly on the `migration-connector` service:
+
+   ```bash
+   gcloud run services add-iam-policy-binding migration-connector \
+     --region=us-central1 \
+     --member="serviceAccount:service-71784361107@gcp-sa-discoveryengine.iam.gserviceaccount.com" \
+     --role="roles/run.invoker"
+   ```
+
+2. **Application-level auth (`AUTH_MODE=static`).** Independent of the Cloud Run IAM gate, the
+   connector itself enforces a bearer-token check (`CONNECTOR_API_TOKEN`, stored in Secret
+   Manager) plus role-based authorization (`CONNECTOR_ROLES`) on every tool call — see
+   [`docs/api/authentication.md`](../api/authentication.md). Gemini Enterprise's registration
+   must supply this token as the `Authorization: Bearer <token>` header on every request.
+
+### Registration Steps
+
+1. Confirm the connector is reachable and returns the expected spec:
+
+   ```bash
+   TOKEN=$(gcloud auth print-identity-token \
+     --impersonate-service-account=connector-tester@hl2-gcpp-ccoe-ge-h-migrat-1646.iam.gserviceaccount.com \
+     --audiences=https://migration-connector-877936790636.us-central1.run.app)
+   curl -H "Authorization: Bearer $TOKEN" \
+     https://migration-connector-877936790636.us-central1.run.app/openapi.json
+   ```
+
+2. Submit the connector URL, OpenAPI spec URL, and `CONNECTOR_API_TOKEN` value through the
+   hackathon's connector-binding template/support channel, so Gemini Enterprise's admin console
+   can bind this endpoint to the shared Gemini Enterprise application instance.
+
+3. Once bound, verify end-to-end by issuing a natural-language request through Gemini Enterprise
+   and confirming it resolves to a `/tools/{tool_name}` call against this connector (check
+   `GET /audit` on the connector for the resulting audit log entry).
