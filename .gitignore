@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Reports
+validation_reports/
+
+# Project/main.py run artifacts (logs, per-run CSVs, results DB) — generated,
+# grows unbounded, and per-table diff CSVs can carry real row values.
+# (root output/ is intentionally tracked — connector demo evidence.)
+Project/output/
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

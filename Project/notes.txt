@@ -1,0 +1,31 @@
+#To do
+1. Create local connection settings
+2. Prepare a list of tables present in local. (For testing)
+3. .yaml file name and the table name inside [Key] should match or silent failure - Done
+    -- keep all the yaml file names and table names in lower cases
+
+Postgres:
+Schema:Public
+
+"Corps"
+"Corps1"
+"facility_groups"
+"general_ledger_line_items"
+"time_zone_maps"
+
+
+DB connection testing - Storable environment
+3.Athena - working [YES/NO] - issue
+4.Postgres - working [YES/NO] YES
+5.MSSQLSERVER - working [YES/NO] YES
+6.Snowflake - working [YES/NO] - YES 
+
+
+To Ganesh:
+1.Keep the name of the .yaml same as the table name
+2.For count validation keep name as only bronze.yaml remove _validation
+
+
+Ascending order:
+time_zone_maps facility_groups companies tiers account_code_sets facilities  - done
+facility_groups discount_plans unit_types sources tenant_account_kinds unit_amenities users unit_groups reasons delinquency_stages delinquency_stage_actions account_codes deposits invoiceable_items discount_plan_ledger_instances units ledger_items invoiceable_amounts leads ledgers tenants settings unit_amenities_units DISCOUNT_PLAN_LEDGER_INSTANCES_LINE_ITEMS ledger_delinquencies credit_items account_balance_taxes change_logged_events insurance_activities notes account_balance_items line_items account_balances transactions events general_ledger_line_items

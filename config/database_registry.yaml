@@ -1,0 +1,59 @@
+# =============================================================================
+# Database Registry
+# =============================================================================
+# Non-secret metadata for each connection defined in .env.
+#
+# WHY THIS FILE EXISTS
+#   .env holds credentials. This file holds the boring-but-required context
+#   that credentials do not carry: which database and schema a connection
+#   actually points at. Keeping them apart means this file is safe to commit
+#   and to review, while .env never is.
+#
+# NEVER put passwords, keys, or tokens here. This file is version-controlled.
+#
+# HOW IT IS USED
+#   The key must match the .env prefix with the trailing underscore removed:
+#       .env has SRC_1_HOST, SRC_1_USERNAME, SRC_1_PASSWORD
+#       → registry key is SRC_1
+#   Values here are FALLBACKS. Anything already resolved from .env or supplied
+#   on the command line wins; these only fill the gaps.
+#
+# ADDING A CONNECTION
+#   1. Add SRC_N_* variables to .env (or run: python src/validate_cli.py setup)
+#   2. Add a matching SRC_N block below
+#   3. Verify with: python src/validate_cli.py connections
+# =============================================================================
+
+version: "1.0"
+
+databases:
+
+  # ── SRC_1 — PostgreSQL ─────────────────────────────────────────────────
+  SRC_1:
+    label: "PostgreSQL — FMS"
+    db_type: postgresql
+    database: fms
+    schema: public
+
+  # ── SRC_2 — Microsoft SQL Server ───────────────────────────────────────
+  SRC_2:
+    label: "MSSQL — DevT5000"
+    db_type: mssql
+    database: DevT5000
+    schema: dbo
+
+  # ── SRC_3 — AWS Athena ─────────────────────────────────────────────────
+  # For Athena the Glue database is the "database" and it has no schema
+  # concept, so schema mirrors the database name.
+  SRC_3:
+    label: "Athena — migration_validator_test"
+    db_type: athena
+    database: migration_validator_test
+    schema: migration_validator_test
+
+  # ── SNOWFLAKE — migration target ───────────────────────────────────────
+  SNOWFLAKE:
+    label: "Snowflake — Bronze layer"
+    db_type: snowflake
+    database: DEV_SITELINK_BRONZE
+    schema: AWSDEV_DEVT5000_DBO

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "migration-validator-webapp",
+      "runtimeExecutable": "streamlit",
+      "runtimeArgs": ["run", "webapp/app.py", "--server.headless", "true", "--server.port", "8502"],
+      "port": 8502
+    }
+  ]
+}

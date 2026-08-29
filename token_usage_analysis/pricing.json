@@ -1,0 +1,17 @@
+{
+  "_comment": "Public list price per 1,000,000 tokens (USD), input/output. These are the model providers' PUBLIC list prices as of the assistant's Jan-2026 knowledge cutoff. IMPORTANT: EPAM DIAL is a proxy in front of these models and may bill at a different internal rate than the public list price shown here (DIAL adds routing/metering on top) — treat DIAL-backed numbers in the report as an approximation anchored to public pricing, not an exact invoice figure. Update this file if EPAM shares the actual internal DIAL rate card, or if provider pricing changes.",
+  "_last_updated": "2026-08-19",
+  "models": {
+    "gpt-4o":                        {"input_per_million": 2.50,  "output_per_million": 10.00},
+    "gpt-4o-mini":                   {"input_per_million": 0.15,  "output_per_million": 0.60},
+    "gpt-4.1":                       {"input_per_million": 2.00,  "output_per_million": 8.00},
+    "gpt-4.1-mini":                  {"input_per_million": 0.40,  "output_per_million": 1.60},
+    "claude-3-5-sonnet-20241022":    {"input_per_million": 3.00,  "output_per_million": 15.00},
+    "claude-3-5-haiku-20241022":     {"input_per_million": 0.80,  "output_per_million": 4.00},
+    "claude-3-opus-20240229":        {"input_per_million": 15.00, "output_per_million": 75.00},
+    "claude-3-haiku-20240307":       {"input_per_million": 0.25,  "output_per_million": 1.25},
+    "anthropic.claude-sonnet-5":     {"input_per_million": 3.00,  "output_per_million": 15.00},
+    "gemini-2.5-pro":                {"input_per_million": 1.25,  "output_per_million": 10.00}
+  },
+  "default_unknown_model": {"input_per_million": 3.00, "output_per_million": 15.00}
+}
