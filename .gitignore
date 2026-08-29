@@ -40,3 +40,8 @@ presentation/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated PowerPoint / scratch files
+_scratch_regen/
+*.pptx
+
