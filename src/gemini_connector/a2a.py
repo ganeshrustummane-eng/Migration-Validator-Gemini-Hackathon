@@ -100,7 +100,11 @@ def handle_a2a_request(
     if not user_text:
         return _jsonrpc_error(request_id, -32602, "Invalid params: no text content in message.parts")
 
-    result = run_chat(user_text)
+    try:
+        result = run_chat(user_text)
+    except Exception as exc:  # noqa: BLE001 — must not 500 an A2A caller; report as JSON-RPC error
+        return _jsonrpc_error(request_id, -32603, f"Internal error: {exc}")
+
     reply_text = result.get("text") or result.get("reply") or ""
 
     return _jsonrpc_result(request_id, {
