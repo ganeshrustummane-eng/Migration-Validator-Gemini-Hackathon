@@ -718,7 +718,14 @@ with st.sidebar:
     elif _claude_key:
         st.success(f"AI backend: Claude ({os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-20241022')})", icon="🤖")
     else:
-        st.error("No AI backend configured (DIAL_API_KEY / CLAUDE_API_KEY missing)", icon="⚠️")
+        # Column-mapping/SQL-generation AI (DIAL/Claude) is separate from the
+        # Gemini Chat widget's own backend — only warn "not configured" if
+        # neither is set, so a Vertex-AI-only setup doesn't look broken here.
+        from gemini_connector.gemini_agent import is_gemini_configured as _is_gemini_ready
+        if _is_gemini_ready():
+            st.info("AI mapping backend (DIAL/Claude) not set — Gemini Chat is configured separately.", icon="ℹ️")
+        else:
+            st.error("No AI backend configured (DIAL_API_KEY / CLAUDE_API_KEY missing)", icon="⚠️")
 
     _sf_account = os.getenv("SNOWFLAKE_ACCOUNT", "")
     if _sf_account:
@@ -790,10 +797,12 @@ with st.sidebar:
 st.title("Migration Validator")
 st.caption("PostgreSQL / MSSQL / Athena → Snowflake — pick everything from live dropdowns, powered by the credentials already in .env.")
 
-tab_single, tab_batch, tab_execute, tab_history, tab_rules, tab_excl, tab_usage, tab_gemini, tab_review, tab_guide = st.tabs(
+tab_single, tab_batch, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_guide = st.tabs(
     ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "🚀 Run Validation", "📈 History & Trends",
-     "📖 Rule Book", "🚫 Exclusions", "📊 Usage & Cost", "🤖 Gemini Chat", "✅ Review & Approve", "📘 Guide"]
+     "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "📘 Guide"]
 )
+# 📊 Usage & Cost lives in the sidebar (see below); 🤖 Gemini Chat is a
+# floating widget (see end of file) — Review & Approve is back as a tab.
 
 # =============================================================================
 # TAB: Generate — Single YAML
@@ -1700,7 +1709,7 @@ with tab_excl:
 # =============================================================================
 # TAB: Usage & Cost
 # =============================================================================
-with tab_usage:
+with st.sidebar.expander("📊 Usage & Cost", expanded=False):
     import datetime
     from collections import defaultdict
 
@@ -1790,19 +1799,135 @@ with tab_usage:
         st.code("python token_usage_analysis/report_token_usage.py --all", language="bash")
 
 # =============================================================================
-# TAB: Gemini Chat
+# FLOATING WIDGET: Gemini Chat — fixed bottom-right bubble, not a tab.
+# Toggle button + panel are two separate CSS-fixed containers (identified by
+# Streamlit's `key=` -> `.st-key-<key>` class) so the panel's visibility can
+# be flipped by injecting different CSS each rerun, without needing to nest
+# the body under an extra `if`/indent level.
 # =============================================================================
-with tab_gemini:
-    st.subheader("Gemini Migration Intelligence")
+st.markdown("""
+<style>
+.st-key-gemini_chat_toggle {
+    position: fixed !important; bottom: 24px !important; right: 24px !important;
+    z-index: 10000 !important; left: auto !important;
+    width: 64px !important; height: 64px !important;
+}
+.st-key-gemini_chat_toggle div[data-testid="stVerticalBlock"] { gap: 0; }
+.st-key-gemini_chat_toggle button {
+    border-radius: 50% !important; width: 64px !important; height: 64px !important;
+    min-width: 64px !important; padding: 0 !important;
+    font-size: 1.6rem !important; line-height: 1 !important;
+    background: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%) !important;
+    color: white !important; border: none !important;
+    box-shadow: 0 4px 16px rgba(108,92,231,0.45) !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+.st-key-gemini_chat_toggle button:hover {
+    transform: scale(1.08) !important;
+    box-shadow: 0 6px 20px rgba(108,92,231,0.6) !important;
+}
+.st-key-gemini_chat_panel {
+    position: fixed !important; bottom: 100px !important; right: 24px !important;
+    z-index: 9999 !important; left: auto !important;
+    /* Width/height are set by a second, dynamic <style> block further down based
+       on st.session_state["_gemini_chat_size"] — NOT a native CSS `resize`
+       handle. Streamlit's own components only recompute their layout on an
+       actual rerun; dragging a native resize handle changes the container's
+       box size without Streamlit ever re-running, so the widgets inside keep
+       their originally-computed widths and visibly overlap. A button-driven
+       size toggle (see below) triggers a real rerun instead, so everything
+       inside reflows correctly for the new size. */
+    max-width: 92vw !important; max-height: 85vh !important;
+    overflow-y: auto;
+    background: var(--background-color, white); border-radius: 16px;
+    box-shadow: 0 10px 32px rgba(0,0,0,0.28); padding: 0;
+    border: 1px solid rgba(128,128,128,0.2);
+}
+.st-key-gemini_chat_size_btn {
+    position: fixed !important; z-index: 10001 !important; left: auto !important;
+}
+.st-key-gemini_chat_size_btn button {
+    width: 28px !important; height: 28px !important; min-width: 28px !important;
+    padding: 0 !important; border-radius: 50% !important;
+    background: rgba(255,255,255,0.25) !important; color: white !important;
+    border: none !important; font-size: 0.85rem !important; line-height: 1 !important;
+}
+.gemini-chat-header {
+    background: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%);
+    color: white; padding: 14px 18px; border-radius: 16px 16px 0 0;
+    display: flex; align-items: center; gap: 10px;
+}
+.gemini-chat-header .gemini-logo {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255,255,255,0.2); display: flex; align-items: center;
+    justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+}
+.gemini-chat-header .gemini-title { font-weight: 700; font-size: 1.05rem; }
+.gemini-chat-header .gemini-subtitle { font-size: 0.78rem; opacity: 0.9; }
+.gemini-chat-body { padding: 14px 18px; }
+</style>
+""", unsafe_allow_html=True)
+
+if "_gemini_chat_open" not in st.session_state:
+    st.session_state["_gemini_chat_open"] = False
+if "_gemini_chat_size" not in st.session_state:
+    st.session_state["_gemini_chat_size"] = "default"
+
+with st.container(key="gemini_chat_toggle"):
+    _toggle_label = "✕" if st.session_state["_gemini_chat_open"] else "✨"
+    if st.button(_toggle_label, key="gemini_chat_toggle_btn", help="Gemini Migration Intelligence chat"):
+        st.session_state["_gemini_chat_open"] = not st.session_state["_gemini_chat_open"]
+        st.rerun()
+
+# Discrete size presets applied via a real Streamlit rerun (not a native CSS
+# resize drag) — see the note on .st-key-gemini_chat_panel above for why.
+_GEMINI_CHAT_SIZES = {"default": (400, 520), "large": (640, 760)}
+_gemini_size = st.session_state["_gemini_chat_size"]
+_gemini_w, _gemini_h = _GEMINI_CHAT_SIZES.get(_gemini_size, _GEMINI_CHAT_SIZES["default"])
+_gemini_btn_bottom = 100 + _gemini_h - 36
+_gemini_btn_right = 24 + _gemini_w - 36
+st.markdown(
+    f"<style>"
+    f".st-key-gemini_chat_panel {{ width: {_gemini_w}px !important; height: {_gemini_h}px !important; }}"
+    f".st-key-gemini_chat_size_btn {{ bottom: {_gemini_btn_bottom}px !important; right: {_gemini_btn_right}px !important; }}"
+    f"</style>",
+    unsafe_allow_html=True,
+)
+
+if not st.session_state["_gemini_chat_open"]:
+    st.markdown(
+        '<style>.st-key-gemini_chat_panel, .st-key-gemini_chat_size_btn '
+        '{ display: none !important; }</style>',
+        unsafe_allow_html=True,
+    )
+else:
+    with st.container(key="gemini_chat_size_btn"):
+        _size_label = "⤡" if _gemini_size == "large" else "⤢"
+        if st.button(_size_label, key="gemini_chat_size_btn_inner", help="Toggle chat panel size"):
+            st.session_state["_gemini_chat_size"] = "default" if _gemini_size == "large" else "large"
+            st.rerun()
+
+with st.container(key="gemini_chat_panel"):
+    st.markdown(
+        '<div class="gemini-chat-header">'
+        '<div class="gemini-logo">✨</div>'
+        '<div><div class="gemini-title">Gemini Migration Intelligence</div>'
+        '<div class="gemini-subtitle">AI assistant · 24 tools · human-approved actions</div></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="gemini-chat-body">', unsafe_allow_html=True)
     st.caption(
-        "Enterprise AI assistant for migration validation. Gemini orchestrates the 24 Migration "
-        "Validator tools — it never invents data. Every write action is audited and requires a "
-        "human reviewer with the appropriate RBAC role."
+        "Gemini orchestrates the 24 Migration Validator tools — it never invents data. "
+        "Every write action is audited and requires a human reviewer with the appropriate RBAC role."
     )
 
     # ── Connector + model status ───────────────────────────────────────────
+    sys.path.insert(0, str(_SRC_DIR))
+    from gemini_connector.gemini_agent import is_gemini_configured, _vertexai_configured
+
     _dial_key     = os.getenv("DIAL_API_KEY", "")
-    _gemini_key   = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
+    _gemini_key   = is_gemini_configured()
     _auth_mode    = os.getenv("AUTH_MODE", "static").upper()
     _connector_ok = bool(os.getenv("CONNECTOR_API_TOKEN") or _auth_mode == "DEV")
 
@@ -1811,7 +1936,8 @@ with tab_gemini:
         _ai_backend = "DIAL · " + os.getenv("DIAL_MODEL", "gpt-4o")
         _ai_icon, _ai_status = "✅", "success"
     elif _gemini_key:
-        _ai_backend = "Gemini · " + os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        _mode_label = "Vertex AI" if _vertexai_configured() else "Developer API"
+        _ai_backend = f"Gemini ({_mode_label}) · " + os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         _ai_icon, _ai_status = "🤖", "success"
     else:
         _ai_backend = "Offline mode"
@@ -1863,7 +1989,9 @@ with tab_gemini:
     if not _gemini_key:
         st.info(
             "Running in **offline mode** — tool dispatch is available but conversational AI "
-            "requires `GOOGLE_API_KEY` or `GEMINI_API_KEY` in `.env`.",
+            "requires either `GOOGLE_API_KEY`/`GEMINI_API_KEY` in `.env`, or "
+            "`GOOGLE_GENAI_USE_VERTEXAI=true` + `GOOGLE_CLOUD_PROJECT` (Vertex AI via ADC, "
+            "for orgs that disable personal API key creation).",
             icon="ℹ️",
         )
 
@@ -1957,10 +2085,17 @@ with tab_gemini:
             st.session_state.pop("gemini_agent_instance", None)
             st.rerun()
 
-    # Chat input — placed last in the tab so it renders below the AI's reply
-    if user_input := st.chat_input("Ask about your migration…", key="gemini_input"):
+    # Plain form instead of st.chat_input — chat_input pins itself to the
+    # true bottom of the whole app (full width), which breaks out of this
+    # fixed-position floating panel. A form stays inside the panel's bounds.
+    with st.form("gemini_chat_form", clear_on_submit=True, border=False):
+        _fc1, _fc2 = st.columns([5, 1])
+        user_input = _fc1.text_input("Ask about your migration…", key="gemini_input", label_visibility="collapsed")
+        sent = _fc2.form_submit_button("➤")
+    if sent and user_input:
         st.session_state["gemini_messages"].append({"role": "user", "content": user_input})
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================

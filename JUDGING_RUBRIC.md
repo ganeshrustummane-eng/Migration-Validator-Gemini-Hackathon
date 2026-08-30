@@ -12,15 +12,16 @@
 
 | Team Member | Role | Gemini Enterprise Certified? | Certificate / Evidence Link |
 |-------------|------|-------------------------------|------------------------------|
-| _TODO_ | _TODO_ | ☐ Yes / ☐ No | _TODO_ |
-| _TODO_ | _TODO_ | ☐ Yes / ☐ No | _TODO_ |
+| Ganesh Rustum Mane | _TODO: role_ | ☑ Yes | [Badge 1](https://www.credly.com/badges/13e2241f-f6ed-4e3d-9dea-8a0b7cf14037/public_url) · [Badge 2](https://www.credly.com/badges/4a1f552a-f0a8-46b9-88df-166ec34078e3/public_url) · [Badge 3](https://www.credly.com/badges/f4766542-66bf-44e9-b555-51c01070dc69/public_url) |
+| Kaustubh Verma | _TODO: role_ | ☑ Yes (3 certifications) | [Badge 1](https://www.credly.com/badges/e62f25ca-ab29-4bf5-9f6c-acabb7bbfdfb/public_url) · [Badge 2](https://www.credly.com/badges/f665b0e3-5f39-421c-bb54-78830da94376/public_url) · _TODO: 3rd badge link (duplicate submitted)_ |
+| Ayush Singh Tomar | _TODO: role_ | ☑ Yes | [Deploy Gemini Enterprise with Workspace Data Sources and Model Armor](https://www.credly.com/badges/baf7e3e0-e2ab-4a0d-a0b0-dd1cb418c7ae/public_url) · [Govern Agent Access with Gemini Enterprise Agent Platform](https://www.credly.com/badges/ce957ebb-c6aa-48e1-9efb-568dd23c71d8/public_url) · [Add Agents to Gemini Enterprise](https://www.credly.com/badges/e90d0db0-a95d-40d4-951b-ddb24c2f1616/public_url) |
+| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes (incl. advanced certification) | [Badge 1](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27404094) · [Badge 2](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27391207) · [Badge 3](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27390964) · [Badge 4](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27389815) · [Badge 5](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27389132) · [Badge 6](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27387697) |
 
-**Certification rate: _TODO_ of _TODO_ team members (___%)**
+**Certification rate: 4 of 4 team members (100%)**
 
-> **Action needed before submission:** fill in every row above with actual team member names,
-> roles, and certification status, and link each certificate (or a screenshot of the completion
-> page) as evidence. This table is a placeholder — an incomplete or unfilled table will score 0
-> on this criterion regardless of the rest of the submission.
+> **Action needed before submission:** replace the `_TODO: role_` cells with each member's actual
+> role on the team, and replace the remaining `_TODO: Credly badge link_` cells with each
+> person's Credly public badge URL once shared.
 
 ---
 
@@ -53,6 +54,25 @@ Discovery (5) · Mapping (3) · Rules (2) · Plans (3) · Execution (3) · Summa
 - Multi-round tool loop (max 10 rounds)
 - Offline fallback via keyword parsing when no API key
 
+### Gemini Enterprise Binding: Live and Verified (not just local)
+
+This connector is registered with the hackathon's shared Gemini Enterprise app
+(`epa.ms/gemini-enterprise`) as **"Migration Validator Connector"**, deployed on Cloud Run at
+`https://migration-connector-877936790636.us-central1.run.app`. Verified end-to-end on
+2026-08-30 by asking Gemini Enterprise directly (not curl, not localhost) *"what migrations
+are configured?"* — it correctly routed the question through the connector and returned live
+data (real PostgreSQL/MSSQL/Athena source connections, real Snowflake target).
+
+Getting there required solving a genuine protocol mismatch: Gemini Enterprise's `agent.json`
+registration invokes the registered URL over the **A2A (Agent2Agent) protocol** (JSON-RPC 2.0),
+not via OpenAPI tool discovery as initially assumed — confirmed by a live `404` when Gemini
+Enterprise called the connector's base URL. [`src/gemini_connector/a2a.py`](src/gemini_connector/a2a.py)
+is a thin A2A↔REST bridge that translates incoming `message/send` calls into the same
+`GeminiAgent` conversation loop `/chat` uses — no tool-calling logic duplicated. See
+[`docs/architecture/gemini-integration.md`](docs/architecture/gemini-integration.md) for the
+full registration/IAM details and [`docs/hackathon/agent.json`](docs/hackathon/agent.json) for
+the registered AgentCard.
+
 **Documentation:** [`docs/api/connector-tools.md`](docs/api/connector-tools.md)
 
 ---
@@ -65,12 +85,16 @@ Discovery (5) · Mapping (3) · Rules (2) · Plans (3) · Execution (3) · Summa
 
 | System | Driver | Status | Config |
 |--------|--------|--------|--------|
-| PostgreSQL | psycopg2-binary | Implemented | `SRC_N_DB_TYPE=postgresql` |
-| Microsoft SQL Server | pyodbc | Implemented | `SRC_N_DB_TYPE=mssql` |
-| AWS Athena | boto3 | Implemented | `SRC_N_DB_TYPE=athena` |
-| Snowflake (Bronze/Silver/Gold) | snowflake-connector-python | Implemented | `SNOWFLAKE_*` vars |
-| EPAM DIAL proxy | openai SDK | Implemented | `DIAL_API_KEY` |
-| Google Gemini | google-generativeai | Implemented | `GOOGLE_API_KEY` |
+| PostgreSQL | psycopg2-binary | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 — validation plan generated | `SRC_N_DB_TYPE=postgresql` |
+| AWS Athena | boto3 + pyathena | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 — validation plan generated for `migration_validator_test.addresses` | `SRC_N_DB_TYPE=athena` |
+| Microsoft SQL Server | pyodbc | Implemented; pending a database-side login permission grant in this specific environment (not a code issue) | `SRC_N_DB_TYPE=mssql` |
+| Snowflake (Bronze/Silver/Gold) | snowflake-connector-python | **Live-verified** as validation target for both sources above | `SNOWFLAKE_*` vars |
+| EPAM DIAL proxy | openai SDK | **Live-verified** — powers AI-assisted column matching for ambiguous mappings | `DIAL_API_KEY` |
+| Google Gemini | google-genai | **Live-verified** — powers the conversational agent via Gemini Enterprise (A2A) and `/chat` | `GOOGLE_API_KEY` |
+
+Two of three source systems are proven working end-to-end through the actual shared Gemini
+Enterprise app, not just localhost — real federated queries and AI-assisted validation plan
+generation across heterogeneous source types (PostgreSQL, AWS Athena) into Snowflake.
 
 ### Multi-Source Federation
 
@@ -185,8 +209,8 @@ The README:
 
 | Criterion | Weight | Evidence Quality | Key Files |
 |-----------|--------|-----------------|-----------|
-| Team Certification | 20% | **TODO — fill in Criterion 0 table above** | — |
-| Client Use Cases | 35% | 10 use cases, 24 tools, full conversation loop | `tools.py`, `gemini_agent.py`, `api.py` |
+| Team Certification | 20% | 4 of 4 members certified (100%) — see Criterion 0 table above | `JUDGING_RUBRIC.md` |
+| Client Use Cases | 35% | 10 use cases, 24 tools, full conversation loop, **live-verified Gemini Enterprise binding** (not just local) | `tools.py`, `gemini_agent.py`, `api.py`, `a2a.py` |
 | Data Accessibility | 15% | 3 source systems + Snowflake, multi-layer | `validate_cli.py`, `supported-databases.md` |
 | Write-Back & Auth | 15% | 6 write tools, JWT+static auth, RBAC, OCC | `auth.py`, `authz.py`, `version_store.py` |
 | Documentation | 15% | 24 docs, Mermaid diagrams, video script, rubric, GCP deployment guide | `docs/`, `README.md` |

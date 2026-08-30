@@ -62,6 +62,7 @@ except ImportError:
 
 from gemini_connector.tools import dispatch_tool, TOOL_FUNCTIONS
 from gemini_connector.gemini_agent import TOOL_DECLARATIONS as _DECLS
+from gemini_connector.a2a import load_agent_card, handle_a2a_request
 from gemini_connector.audit import audit_logger, AuditRecord
 from gemini_connector.approval_store import approval_store
 from gemini_connector.version_store import version_store, VersionConflictError
@@ -244,18 +245,17 @@ def chat(request: ChatRequest, req: Request):
     Read-only operations are open; write actions still require the actor to
     have appropriate permissions when the tool routes through /tools.
     """
-    from gemini_connector.gemini_agent import GeminiAgent
+    from gemini_connector.gemini_agent import GeminiAgent, is_gemini_configured
 
     session_key = request.actor or "default"
     if session_key not in _agent_cache or request.reset:
         _agent_cache[session_key] = GeminiAgent()
 
     agent: GeminiAgent = _agent_cache[session_key]
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
 
     result = (
         agent.chat(request.message, actor=request.actor)
-        if api_key
+        if is_gemini_configured()
         else agent.chat_offline(request.message)
     )
     return {
@@ -264,6 +264,45 @@ def chat(request: ChatRequest, req: Request):
         "rounds":     result.get("rounds", 0),
         "offline":    result.get("offline", False),
     }
+
+
+# ---------------------------------------------------------------------------
+# A2A (Agent2Agent) protocol bridge — for Gemini Enterprise's agent.json
+# registration, which calls this connector's base URL as an A2A JSON-RPC
+# endpoint rather than via /tools + OpenAPI discovery. See a2a.py for why
+# this exists and what it does/doesn't guarantee.
+# ---------------------------------------------------------------------------
+
+@app.get("/.well-known/agent.json", include_in_schema=False)
+def a2a_agent_card():
+    return load_agent_card()
+
+
+@app.post("/", include_in_schema=False)
+async def a2a_entrypoint(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}
+
+    # Session key per A2A contextId, not a single shared constant — a hardcoded key here
+    # meant every Gemini Enterprise conversation (from any user, any thread) accumulated
+    # into the SAME GeminiAgent history forever, including stale tool-call errors from
+    # long-past turns bleeding into unrelated new questions.
+    context_id = None
+    if isinstance(body, dict):
+        context_id = ((body.get("params") or {}).get("message") or {}).get("contextId")
+    session_key = f"a2a:{context_id}" if context_id else f"a2a:oneoff:{uuid.uuid4()}"
+
+    def _run_chat(text: str) -> Dict[str, Any]:
+        from gemini_connector.gemini_agent import GeminiAgent, is_gemini_configured
+
+        if session_key not in _agent_cache:
+            _agent_cache[session_key] = GeminiAgent()
+        agent: GeminiAgent = _agent_cache[session_key]
+        return agent.chat(text, actor="") if is_gemini_configured() else agent.chat_offline(text)
+
+    return handle_a2a_request(body, _run_chat)
 
 
 # ---------------------------------------------------------------------------

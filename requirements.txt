@@ -14,6 +14,7 @@ psycopg2-binary       # PostgreSQL
 pyodbc                # Microsoft SQL Server
 snowflake-connector-python  # Snowflake
 boto3                 # AWS Athena
+pyathena              # AWS Athena column extraction (extractors.py:AthenaExtractor) — imported but was missing here
 
 # Data Processing
 pandas          # DataFrame handling for validation

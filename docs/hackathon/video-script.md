@@ -134,6 +134,25 @@ python demo_security.py
 
 ---
 
+## Segment 6b — Live Gemini Enterprise Proof (optional, if time allows — 4:15–4:30)
+
+**[Show: epa.ms/gemini-enterprise, "Migration Validator Connector" agent selected]**
+
+This is your strongest piece of evidence for Stream 3 — it proves the connector works through
+the actual shared Gemini Enterprise app, not just localhost. If you can fit it in (trim Segment
+5 slightly if needed), it's worth more than any slide claim.
+
+**Type into Gemini Enterprise directly:**
+> "What migrations are configured?"
+
+**[Pause — let the real response render on screen]**
+
+> "This isn't a local demo — that's the real, shared Gemini Enterprise app used across the
+> whole hackathon, calling our connector live on Cloud Run and getting back our actual
+> configured PostgreSQL, MSSQL, Athena, and Snowflake connections."
+
+---
+
 ## Segment 7 — ROI and Closing (4:30–5:00)
 
 **[Show: business metrics from get_business_metrics or web UI]**

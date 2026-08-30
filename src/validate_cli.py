@@ -464,7 +464,7 @@ def _save_session_as_profile(rec: dict, sf_database: str, sf_schema: str) -> Non
     source_dict = {
         "db_type":  rec.get("db_type", "postgresql"),
         "host":     rec.get("host", ""),
-        "port":     int(rec.get("port", 5432)),
+        "port":     int(rec.get("port") or 5432),
         "database": rec.get("database", ""),
         "schema":   rec.get("schema", ""),
         "username": rec.get("username", ""),

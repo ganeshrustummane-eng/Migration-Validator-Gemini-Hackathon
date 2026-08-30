@@ -30,14 +30,14 @@ _TYPE_ALIASES = {
 
 
 def _load_env(environment: str) -> dict:
+    # Falls back to real process environment variables when no per-environment
+    # .env file exists — e.g. Cloud Run, which injects SRC_N_*/SNOWFLAKE_* as
+    # actual env vars/secrets rather than a checked-in .env file. The file, when
+    # present (local dev), still takes precedence over the ambient environment.
     fname = _ENV_FILE_BY_ENVIRONMENT.get(environment, f".env.{environment}")
     path = ROOT_DIR / fname
-    if not path.exists():
-        raise FileNotFoundError(
-            f"No env file for environment '{environment}': expected {path}. "
-            f"Copy .env.example to {fname} and fill in real values."
-        )
-    return dotenv_values(path)
+    file_env = dotenv_values(path) if path.exists() else {}
+    return {**os.environ, **file_env}
 
 
 def _find_source(env: dict, db_type: str) -> dict:

@@ -1390,7 +1390,7 @@ def print_connection_registry(env_path: Optional[Path] = None) -> List[Dict]:
 
     try:
         from dotenv import dotenv_values
-        env = dotenv_values(env_path)
+        env = {**os.environ, **dotenv_values(env_path)}
     except ImportError:
         env = {}
 
