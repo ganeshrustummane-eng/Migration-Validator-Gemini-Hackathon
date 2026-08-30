@@ -85,15 +85,16 @@ the registered AgentCard.
 
 | System | Driver | Status | Config |
 |--------|--------|--------|--------|
-| PostgreSQL | psycopg2-binary | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 | `SRC_N_DB_TYPE=postgresql` |
-| AWS Athena | boto3 | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 (validation plan generated) | `SRC_N_DB_TYPE=athena` |
+| PostgreSQL | psycopg2-binary | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 — validation plan generated | `SRC_N_DB_TYPE=postgresql` |
+| AWS Athena | boto3 + pyathena | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 — validation plan generated for `migration_validator_test.addresses` | `SRC_N_DB_TYPE=athena` |
 | Microsoft SQL Server | pyodbc | Implemented; pending a database-side login permission grant in this specific environment (not a code issue) | `SRC_N_DB_TYPE=mssql` |
 | Snowflake (Bronze/Silver/Gold) | snowflake-connector-python | **Live-verified** as validation target for both sources above | `SNOWFLAKE_*` vars |
+| EPAM DIAL proxy | openai SDK | **Live-verified** — powers AI-assisted column matching for ambiguous mappings | `DIAL_API_KEY` |
+| Google Gemini | google-genai | **Live-verified** — powers the conversational agent via Gemini Enterprise (A2A) and `/chat` | `GOOGLE_API_KEY` |
 
-Two of three source systems are proven working through the actual shared Gemini Enterprise app,
-not just localhost — real federated queries across heterogeneous source types into Snowflake.
-| EPAM DIAL proxy | openai SDK | Implemented | `DIAL_API_KEY` |
-| Google Gemini | google-generativeai | Implemented | `GOOGLE_API_KEY` |
+Two of three source systems are proven working end-to-end through the actual shared Gemini
+Enterprise app, not just localhost — real federated queries and AI-assisted validation plan
+generation across heterogeneous source types (PostgreSQL, AWS Athena) into Snowflake.
 
 ### Multi-Source Federation
 
