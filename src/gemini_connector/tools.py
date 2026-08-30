@@ -286,7 +286,7 @@ def list_tables(source_slot: str, database: str, schema: str) -> Dict[str, Any]:
         pw = os.getenv(f"{rec.get('prefix', '')}PASSWORD", "")
 
         extractor = ExtractorFactory.create(
-            rec["db_type"], host=rec["host"], port=int(rec.get("port", 0)),
+            rec["db_type"], host=rec["host"], port=int(rec.get("port") or 0),
             database=database, username=rec["username"], password=pw,
             auth=rec.get("auth", ""), s3_output=rec.get("s3_output", ""),
         )
@@ -323,7 +323,7 @@ def get_table_schema(
         pw = os.getenv(f"{rec.get('prefix', '')}PASSWORD", "")
 
         extractor = ExtractorFactory.create(
-            rec["db_type"], host=rec["host"], port=int(rec.get("port", 0)),
+            rec["db_type"], host=rec["host"], port=int(rec.get("port") or 0),
             database=database, username=rec["username"], password=pw,
             auth=rec.get("auth", ""), s3_output=rec.get("s3_output", ""),
         )
@@ -686,7 +686,7 @@ def generate_validation_plan(
 
         pw = os.getenv(f"{rec.get('prefix', '')}PASSWORD", "")
         extractor = ExtractorFactory.create(
-            rec["db_type"], host=rec["host"], port=int(rec.get("port", 0)),
+            rec["db_type"], host=rec["host"], port=int(rec.get("port") or 0),
             database=source_database, username=rec["username"], password=pw,
             auth=rec.get("auth", ""), s3_output=rec.get("s3_output", ""),
         )
