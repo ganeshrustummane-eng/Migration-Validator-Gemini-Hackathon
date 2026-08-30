@@ -15,7 +15,7 @@
 | Ganesh Rustum Mane | _TODO: role_ | ☑ Yes | [Badge 1](https://www.credly.com/badges/13e2241f-f6ed-4e3d-9dea-8a0b7cf14037/public_url) · [Badge 2](https://www.credly.com/badges/4a1f552a-f0a8-46b9-88df-166ec34078e3/public_url) · [Badge 3](https://www.credly.com/badges/f4766542-66bf-44e9-b555-51c01070dc69/public_url) |
 | Kaustubh Verma | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
 | Ayush Singh Tomar | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
-| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
+| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes (incl. advanced certification) | [Badge 1](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27404094) · [Badge 2](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27391207) · [Badge 3](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27390964) · [Badge 4](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27389815) · [Badge 5](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27389132) · [Badge 6](https://partner.skills.google/public_profiles/59c33cd3-d7fd-4a3e-8dc3-b970fb95b366/badges/27387697) |
 
 **Certification rate: 4 of 4 team members (100%)**
 
