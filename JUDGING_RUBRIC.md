@@ -85,10 +85,13 @@ the registered AgentCard.
 
 | System | Driver | Status | Config |
 |--------|--------|--------|--------|
-| PostgreSQL | psycopg2-binary | Implemented | `SRC_N_DB_TYPE=postgresql` |
-| Microsoft SQL Server | pyodbc | Implemented | `SRC_N_DB_TYPE=mssql` |
-| AWS Athena | boto3 | Implemented | `SRC_N_DB_TYPE=athena` |
-| Snowflake (Bronze/Silver/Gold) | snowflake-connector-python | Implemented | `SNOWFLAKE_*` vars |
+| PostgreSQL | psycopg2-binary | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 | `SRC_N_DB_TYPE=postgresql` |
+| AWS Athena | boto3 | **Live-verified** end-to-end through Gemini Enterprise, 2026-08-30 (validation plan generated) | `SRC_N_DB_TYPE=athena` |
+| Microsoft SQL Server | pyodbc | Implemented; pending a database-side login permission grant in this specific environment (not a code issue) | `SRC_N_DB_TYPE=mssql` |
+| Snowflake (Bronze/Silver/Gold) | snowflake-connector-python | **Live-verified** as validation target for both sources above | `SNOWFLAKE_*` vars |
+
+Two of three source systems are proven working through the actual shared Gemini Enterprise app,
+not just localhost — real federated queries across heterogeneous source types into Snowflake.
 | EPAM DIAL proxy | openai SDK | Implemented | `DIAL_API_KEY` |
 | Google Gemini | google-generativeai | Implemented | `GOOGLE_API_KEY` |
 
