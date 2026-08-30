@@ -12,17 +12,16 @@
 
 | Team Member | Role | Gemini Enterprise Certified? | Certificate / Evidence Link |
 |-------------|------|-------------------------------|------------------------------|
-| Ganesh Rustum Mane | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
-| Kaustubh Verma | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
-| Ayush Singh Tomar | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
-| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
+| Ganesh Rustum Mane | _TODO: role_ | ☑ Yes | [Badge 1](https://www.credly.com/badges/13e2241f-f6ed-4e3d-9dea-8a0b7cf14037/public_url) · [Badge 2](https://www.credly.com/badges/4a1f552a-f0a8-46b9-88df-166ec34078e3/public_url) · [Badge 3](https://www.credly.com/badges/f4766542-66bf-44e9-b555-51c01070dc69/public_url) |
+| Kaustubh Verma | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
+| Ayush Singh Tomar | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
+| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes | _TODO: Credly badge link_ |
 
 **Certification rate: 4 of 4 team members (100%)**
 
 > **Action needed before submission:** replace the `_TODO: role_` cells with each member's actual
-> role on the team, and replace each `[screenshot/link TODO](#)` with a real link to that
-> person's Credly certificate or a screenshot of their completion page (upload the screenshot
-> into `docs/` or `Project/` and link it here, or paste a Credly badge URL).
+> role on the team, and replace the remaining `_TODO: Credly badge link_` cells with each
+> person's Credly public badge URL once shared.
 
 ---
 
@@ -54,6 +53,25 @@ Discovery (5) · Mapping (3) · Rules (2) · Plans (3) · Execution (3) · Summa
 - `TOOL_DECLARATIONS` in `src/gemini_connector/gemini_agent.py` — 24 Gemini-compatible function schemas
 - Multi-round tool loop (max 10 rounds)
 - Offline fallback via keyword parsing when no API key
+
+### Gemini Enterprise Binding: Live and Verified (not just local)
+
+This connector is registered with the hackathon's shared Gemini Enterprise app
+(`epa.ms/gemini-enterprise`) as **"Migration Validator Connector"**, deployed on Cloud Run at
+`https://migration-connector-877936790636.us-central1.run.app`. Verified end-to-end on
+2026-08-30 by asking Gemini Enterprise directly (not curl, not localhost) *"what migrations
+are configured?"* — it correctly routed the question through the connector and returned live
+data (real PostgreSQL/MSSQL/Athena source connections, real Snowflake target).
+
+Getting there required solving a genuine protocol mismatch: Gemini Enterprise's `agent.json`
+registration invokes the registered URL over the **A2A (Agent2Agent) protocol** (JSON-RPC 2.0),
+not via OpenAPI tool discovery as initially assumed — confirmed by a live `404` when Gemini
+Enterprise called the connector's base URL. [`src/gemini_connector/a2a.py`](src/gemini_connector/a2a.py)
+is a thin A2A↔REST bridge that translates incoming `message/send` calls into the same
+`GeminiAgent` conversation loop `/chat` uses — no tool-calling logic duplicated. See
+[`docs/architecture/gemini-integration.md`](docs/architecture/gemini-integration.md) for the
+full registration/IAM details and [`docs/hackathon/agent.json`](docs/hackathon/agent.json) for
+the registered AgentCard.
 
 **Documentation:** [`docs/api/connector-tools.md`](docs/api/connector-tools.md)
 
@@ -188,7 +206,7 @@ The README:
 | Criterion | Weight | Evidence Quality | Key Files |
 |-----------|--------|-----------------|-----------|
 | Team Certification | 20% | 4 of 4 members certified (100%) — see Criterion 0 table above | `JUDGING_RUBRIC.md` |
-| Client Use Cases | 35% | 10 use cases, 24 tools, full conversation loop | `tools.py`, `gemini_agent.py`, `api.py` |
+| Client Use Cases | 35% | 10 use cases, 24 tools, full conversation loop, **live-verified Gemini Enterprise binding** (not just local) | `tools.py`, `gemini_agent.py`, `api.py`, `a2a.py` |
 | Data Accessibility | 15% | 3 source systems + Snowflake, multi-layer | `validate_cli.py`, `supported-databases.md` |
 | Write-Back & Auth | 15% | 6 write tools, JWT+static auth, RBAC, OCC | `auth.py`, `authz.py`, `version_store.py` |
 | Documentation | 15% | 24 docs, Mermaid diagrams, video script, rubric, GCP deployment guide | `docs/`, `README.md` |

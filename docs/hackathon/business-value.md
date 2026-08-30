@@ -124,6 +124,33 @@ This is an illustrative calculation based on industry-typical effort estimates, 
 
 ---
 
+## Lessons Learned: Getting a REST Connector Bound to Gemini Enterprise
+
+Registering this connector with the hackathon's shared Gemini Enterprise app surfaced a real
+protocol mismatch worth documenting, since it likely affects other REST/OpenAPI connector teams:
+
+1. **`agent.json` (AgentCard) registration invokes the A2A protocol, not OpenAPI discovery.**
+   We assumed Gemini Enterprise would call `/tools/{tool_name}` per our published OpenAPI spec
+   (`/openapi.json`), since that's the standard "custom connector" pattern. Instead, the
+   registered `url` is called directly over A2A JSON-RPC (`message/send`) — confirmed by a live
+   `404 Not Found` the first time Gemini Enterprise tried to invoke us.
+2. **Fix: a thin protocol bridge, not a rewrite.** Rather than re-architecting the connector as
+   an MCP/A2A-native server, we added [`src/gemini_connector/a2a.py`](../../src/gemini_connector/a2a.py) —
+   translates the A2A `message/send` envelope into the same `GeminiAgent.chat()` call our
+   existing `/chat` REST endpoint already used. Zero duplicated business logic.
+3. **The model name also needs independent verification, not just internal consistency.**
+   A hardcoded default model name (`gemini-3.6-flash`) turned out not to exist as a Vertex AI
+   publisher model in this project's region, even though it worked against the separate Gemini
+   Developer API locally — confirmed via a live `404` from Cloud Run logs, not assumption.
+   Switched to `gemini-2.5-flash` after cross-checking against another team's confirmed-working
+   Vertex AI model in the same hackathon environment, rather than guessing again.
+4. **Takeaway:** "the schema validates" and "the registration was accepted" are necessary but
+   not sufficient — the only real proof a connector works is an end-to-end call through the
+   actual Gemini Enterprise UI, checked against server-side logs, not just a green checkmark
+   from whoever reviews the registration request.
+
+---
+
 ## Why This Matters for Stream 3 (Gemini Connectors)
 
 Migration Validator demonstrates what a purpose-built Gemini connector enables:
