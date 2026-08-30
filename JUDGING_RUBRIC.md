@@ -12,15 +12,17 @@
 
 | Team Member | Role | Gemini Enterprise Certified? | Certificate / Evidence Link |
 |-------------|------|-------------------------------|------------------------------|
-| _TODO_ | _TODO_ | ☐ Yes / ☐ No | _TODO_ |
-| _TODO_ | _TODO_ | ☐ Yes / ☐ No | _TODO_ |
+| Ganesh Rustum Mane | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
+| Kaustubh Verma | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
+| Ayush Singh Tomar | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
+| Abdul Rasheed Shaik | _TODO: role_ | ☑ Yes | Certified Partner Specialist – Gemini Enterprise Deployment ([screenshot/link TODO](#)) |
 
-**Certification rate: _TODO_ of _TODO_ team members (___%)**
+**Certification rate: 4 of 4 team members (100%)**
 
-> **Action needed before submission:** fill in every row above with actual team member names,
-> roles, and certification status, and link each certificate (or a screenshot of the completion
-> page) as evidence. This table is a placeholder — an incomplete or unfilled table will score 0
-> on this criterion regardless of the rest of the submission.
+> **Action needed before submission:** replace the `_TODO: role_` cells with each member's actual
+> role on the team, and replace each `[screenshot/link TODO](#)` with a real link to that
+> person's Credly certificate or a screenshot of their completion page (upload the screenshot
+> into `docs/` or `Project/` and link it here, or paste a Credly badge URL).
 
 ---
 
@@ -185,7 +187,7 @@ The README:
 
 | Criterion | Weight | Evidence Quality | Key Files |
 |-----------|--------|-----------------|-----------|
-| Team Certification | 20% | **TODO — fill in Criterion 0 table above** | — |
+| Team Certification | 20% | 4 of 4 members certified (100%) — see Criterion 0 table above | `JUDGING_RUBRIC.md` |
 | Client Use Cases | 35% | 10 use cases, 24 tools, full conversation loop | `tools.py`, `gemini_agent.py`, `api.py` |
 | Data Accessibility | 15% | 3 source systems + Snowflake, multi-layer | `validate_cli.py`, `supported-databases.md` |
 | Write-Back & Auth | 15% | 6 write tools, JWT+static auth, RBAC, OCC | `auth.py`, `authz.py`, `version_store.py` |

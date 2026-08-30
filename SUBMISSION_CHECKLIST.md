@@ -36,7 +36,7 @@ Complete each item before final submission. Check the box when done.
 - [ ] `POST /chat` returns a response with `text` and `tool_calls` fields
 - [ ] Gemini function calling loop completes without error (max 10 rounds)
 - [ ] Offline fallback (`chat_offline`) works when `GOOGLE_API_KEY` is absent
-- [ ] `GEMINI_MODEL=gemini-1.5-pro` is the correct default model ID
+- [ ] `GEMINI_MODEL=gemini-3.6-flash` is the correct default model ID
 
 ---
 
@@ -148,17 +148,26 @@ Complete each item before final submission. Check the box when done.
 
 ## GCP Deployment (if presenting a live deployed instance)
 
-- [ ] `docker build .` succeeds locally using the repo-root `Dockerfile`
-- [ ] Connector image pushed to Artifact Registry and deployed to Cloud Run
-- [ ] `curl <cloud-run-url>/health` and `/tools` return valid responses (no 401/500)
-- [ ] Secrets (`GOOGLE_API_KEY`, `CONNECTOR_API_TOKEN`, DB/Snowflake passwords) are in Secret
+- [x] `docker build .` succeeds — verified via `gcloud builds submit` (Cloud Build), 2026-08-29
+- [x] Connector image pushed to Artifact Registry and deployed to Cloud Run
+      (`migration-connector`, region `us-central1`,
+      `https://migration-connector-877936790636.us-central1.run.app`)
+- [x] `curl <cloud-run-url>/health` and `/tools` return valid responses — verified HTTP 200 on
+      both, with a Cloud Run identity token (see
+      [`docs/architecture/gemini-integration.md`](docs/architecture/gemini-integration.md))
+- [x] Secrets (`GOOGLE_API_KEY`, `CONNECTOR_API_TOKEN`, DB/Snowflake passwords) are in Secret
       Manager, not passed as plain `--set-env-vars`
 - [ ] `--min-instances 1` is set on the connector before the judging/demo session to avoid
-      cold-start latency
-- [ ] The Streamlit review UI (if also deployed) is **not** publicly invokable
-      (`--no-allow-unauthenticated` + IAM or IAP)
-- [ ] Deployed connector URL is registered with Gemini Enterprise and a live tool call succeeds
-      end-to-end (not just against `localhost`)
+      cold-start latency — **needs verification**, run:
+      `gcloud run services describe migration-connector --region=us-central1 --format='value(spec.template.metadata.annotations["autoscaling.knative.dev/minScale"])'`
+- [x] The Streamlit review UI (`migration-webapp`) is **not** publicly invokable — org policy
+      blocks `--allow-unauthenticated`; both services require a Cloud Run IAM identity token
+- [x] Deployed connector URL is registered with Gemini Enterprise — organizer confirmed
+      "agent has been added and shared with CloudGCPP-CCOEGEHmigrat-1646@epam.com" via
+      `agent.json` (see [`docs/hackathon/agent.json`](docs/hackathon/agent.json)).
+      **Still to verify:** a live tool call actually succeeds end-to-end through
+      epa.ms/gemini-enterprise (not just against `localhost`) — confirm via the connector's
+      own `/audit` endpoint after asking Gemini Enterprise a question that should trigger a tool.
 
 ---
 

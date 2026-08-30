@@ -52,7 +52,7 @@ User receives natural language explanation
 
 ```python
 agent = GeminiAgent(
-    model="gemini-1.5-pro",      # from GEMINI_MODEL env var
+    model="gemini-3.6-flash",      # from GEMINI_MODEL env var
     api_key="...",               # from GOOGLE_API_KEY or GEMINI_API_KEY
     max_tool_rounds=10           # prevents infinite loops
 )
@@ -212,7 +212,7 @@ Each actor (`jane.doe@company.com`) gets an isolated conversation history. The `
 |---------------------|---------|-------------|
 | `GOOGLE_API_KEY` | — | Primary Gemini API key |
 | `GEMINI_API_KEY` | — | Alias for `GOOGLE_API_KEY` |
-| `GEMINI_MODEL` | `gemini-1.5-pro` | Gemini model to use |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model to use |
 
 ---
 
@@ -234,7 +234,7 @@ tools = [genai.protos.Tool(
     ]
 )]
 
-model = genai.GenerativeModel("gemini-1.5-pro", tools=tools)
+model = genai.GenerativeModel("gemini-3.6-flash", tools=tools)
 chat = model.start_chat()
 
 # Send a message
@@ -295,11 +295,19 @@ classic Gemini API integration (`GeminiAgent`) described above.
 
 ### Deployed Endpoint
 
+> **Status: deployed and verified** (region `us-central1`). Verified live on 2026-08-29 —
+> `/health` returns `{"status":"ok","tools_available":24,"auth_mode":"static"}` (HTTP 200),
+> `/tools` returns the full 24-tool list (HTTP 200), and the paired Streamlit review UI
+> (`migration-webapp`) responds HTTP 200. All three require a Cloud Run identity token
+> (`--allow-unauthenticated` is blocked by this project's org policy) — access is via IAM
+> (`roles/run.invoker`), not the public internet.
+
 ```
 Connector URL   : https://migration-connector-877936790636.us-central1.run.app
 OpenAPI spec    : https://migration-connector-877936790636.us-central1.run.app/openapi.json
 Tool list       : https://migration-connector-877936790636.us-central1.run.app/tools  (24 tools)
 Health check    : https://migration-connector-877936790636.us-central1.run.app/health
+Webapp (review) : https://migration-webapp-877936790636.us-central1.run.app
 ```
 
 FastAPI auto-generates a full OpenAPI 3.1 document at `/openapi.json` — this is the artifact
@@ -310,16 +318,18 @@ operations, request/response schemas, and parameters. No hand-written spec is re
 
 Access to this connector is gated at two independent layers:
 
-1. **Cloud Run IAM (transport layer).** The service does not use `--allow-unauthenticated`
-   (blocked by this project's org policy). Instead, `roles/run.invoker` is granted directly to
-   the Discovery Engine service agent that Gemini Enterprise calls through:
+1. **Cloud Run IAM (transport layer) — required, since this project's org policy blocks
+   `--allow-unauthenticated`.** `roles/run.invoker` is already granted on the `migration-connector`
+   service (verified via `gcloud run services get-iam-policy migration-connector
+   --region=us-central1`) to:
 
    ```
-   serviceAccount:service-71784361107@gcp-sa-discoveryengine.iam.gserviceaccount.com
+   serviceAccount:service-71784361107@gcp-sa-discoveryengine.iam.gserviceaccount.com   (Discovery Engine — Gemini Enterprise's caller identity)
+   serviceAccount:connector-tester@hl2-gcpp-ccoe-ge-h-migrat-1646.iam.gserviceaccount.com  (used for manual identity-token testing)
+   user:ganesh_rustummane@epam.com
    ```
 
-   This binding is present at both the **project level** (pre-provisioned for this
-   integration) and explicitly on the `migration-connector` service:
+   To replicate this on a fresh service:
 
    ```bash
    gcloud run services add-iam-policy-binding migration-connector \
@@ -336,14 +346,12 @@ Access to this connector is gated at two independent layers:
 
 ### Registration Steps
 
-1. Confirm the connector is reachable and returns the expected spec:
+1. Confirm the connector is reachable and returns the expected spec (adjust if using
+   `AUTH_MODE=static` with a bearer token instead of Cloud Run IAM):
 
    ```bash
-   TOKEN=$(gcloud auth print-identity-token \
-     --impersonate-service-account=connector-tester@hl2-gcpp-ccoe-ge-h-migrat-1646.iam.gserviceaccount.com \
-     --audiences=https://migration-connector-877936790636.us-central1.run.app)
-   curl -H "Authorization: Bearer $TOKEN" \
-     https://migration-connector-877936790636.us-central1.run.app/openapi.json
+   curl -H "Authorization: Bearer $CONNECTOR_API_TOKEN" \
+     <Connector URL>/openapi.json
    ```
 
 2. Submit the connector URL, OpenAPI spec URL, and `CONNECTOR_API_TOKEN` value through the
