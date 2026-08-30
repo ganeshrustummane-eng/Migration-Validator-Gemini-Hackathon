@@ -112,6 +112,12 @@ SNOWFLAKE_ROLE=your-role
 # Database/schema set dynamically per table
 ```
 
+**Known limitation:** `list_databases` / `list_schemas` / `list_tables` only accept a source
+slot (`SRC_1`, `SRC_2`, `SRC_3`) — there is currently no equivalent tool to browse Snowflake's
+own schema directly through Gemini. Snowflake-side schema is instead discovered implicitly as
+part of `generate_validation_plan` for a specific source→target table pair. Planned: a
+`list_snowflake_tables` tool for direct target-side discovery.
+
 ---
 
 ## Multi-Connection Registry
