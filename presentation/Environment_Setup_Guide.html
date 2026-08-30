@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Migration Validator - Environment Setup Guide</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Calibri, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px;
+            background: #f5f5f5;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 32px;
+        }
+        
+        .header p {
+            margin: 10px 0 0;
+            opacity: 0.9;
+        }
+        
+        .step-container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin: 20px 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 30px;
+            background: #0078D4;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            box-shadow: 0 4px 10px rgba(0,120,212,0.3);
+        }
+        
+        .step-title {
+            color: #0078D4;
+            font-size: 22px;
+            margin: 10px 0 20px 0;
+            padding-left: 40px;
+        }
+        
+        .step-content {
+            margin-left: 0;
+        }
+        
+        h3 {
+            color: #444;
+            font-size: 16px;
+            margin-top: 25px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .cmd-comment {
+            color: #6A9955;
+        }
+        
+        .cmd-output {
+            color: #CE9178;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px 15px;
+            text-align: left;
+        }
+        
+        th {
+            background: #0078D4;
+            color: white;
+        }
+        
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .alert {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .alert-info {
+            background: #e7f3ff;
+            border-left: 4px solid #0078D4;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        
+        .alert strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .checklist li {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .checklist li:last-child {
+            border-bottom: none;
+        }
+        
+        .check-icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background: #d4edda;
+            color: #28a745;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .time-badge {
+            display: inline-block;
+            background: #e7f3ff;
+            color: #0078D4;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        .config-block {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        
+        .config-block h4 {
+            color: #0078D4;
+            margin: 0 0 15px 0;
+            font-size: 16px;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #666;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #0078D4;
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding: 10px 0 20px;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 15px;
+            width: 10px;
+            height: 10px;
+            background: #0078D4;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>⚙️ Environment Setup Guide</h1>
+        <p>Step-by-step instructions to set up Migration Validator on your local machine</p>
+        <p style="font-size: 14px; margin-top: 15px;">⏱️ Estimated Time: 30-45 minutes</p>
+    </div>
+
+    <!-- Prerequisites -->
+    <div class="step-container">
+        <div class="step-number">0</div>
+        <h2 class="step-title">Prerequisites Checklist</h2>
+        <div class="step-content">
+            <p>Before starting, ensure you have the following:</p>
+            
+            <ul class="checklist">
+                <li>
+                    <span class="check-icon">✓</span>
+                    <strong>Python 3.10 or higher</strong> - Runtime environment
+                    <span class="time-badge">Required</span>
+                </li>
+                <li>
+                    <span class="check-icon">✓</span>
+                    <strong>Git</strong> - For cloning the repository
+                    <span class="time-badge">Required</span>
+                </li>
+                <li>
+                    <span class="check-icon">✓</span>
+                    <strong>VPN Access</strong> - Required for DIAL AI service
+                    <span class="time-badge">Required</span>
+                </li>
+                <li>
+                    <span class="check-icon">✓</span>
+                    <strong>Microsoft ODBC Driver 18</strong> - For MSSQL connectivity
+                    <span class="time-badge">For MSSQL</span>
+                </li>
+                <li>
+                    <span class="check-icon">✓</span>
+                    <strong>DIAL API Key</strong> - AI service access
+                    <span class="time-badge">Required</span>
+                </li>
+            </ul>
+
+            <div class="alert alert-warning">
+                <strong>⚠️ Important</strong>
+                The Migration Validator requires a valid <code>DIAL_API_KEY</code> for operation. 
+                There is no fallback to rule-based generation. Contact your team lead to obtain access.
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Clone Repository -->
+    <div class="step-container">
+        <div class="step-number">1</div>
+        <h2 class="step-title">Clone the Repository <span class="time-badge">2 min</span></h2>
+        <div class="step-content">
+            <p>Open PowerShell or Command Prompt and run:</p>
+            
+<pre><code><span class="cmd-comment"># Clone the repository</span>
+git clone https://github.com/your-org/migration-validator.git
+
+<span class="cmd-comment"># Navigate to the project directory</span>
+cd migration-validator
+
+<span class="cmd-comment"># Verify the folder structure</span>
+dir
+<span class="cmd-output"># You should see: src/, config/, docs3.1/, requirements.txt, etc.</span></code></pre>
+        </div>
+    </div>
+
+    <!-- Step 2: Create Virtual Environment -->
+    <div class="step-container">
+        <div class="step-number">2</div>
+        <h2 class="step-title">Create Virtual Environment <span class="time-badge">2 min</span></h2>
+        <div class="step-content">
+            <p>A virtual environment isolates project dependencies from your system Python:</p>
+
+<pre><code><span class="cmd-comment"># Create a virtual environment</span>
+python -m venv venv
+
+<span class="cmd-comment"># Activate the virtual environment (Windows)</span>
+venv\Scripts\activate
+
+<span class="cmd-comment"># Activate the virtual environment (Linux/macOS)</span>
+source venv/bin/activate
+
+<span class="cmd-comment"># Verify activation - you should see (venv) in your prompt</span>
+<span class="cmd-output">(venv) C:\migration-validator></span></code></pre>
+
+            <div class="alert alert-info">
+                <strong>💡 Tip</strong>
+                Always activate the virtual environment before running any Python commands for this project.
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Install Dependencies -->
+    <div class="step-container">
+        <div class="step-number">3</div>
+        <h2 class="step-title">Install Python Dependencies <span class="time-badge">5 min</span></h2>
+        <div class="step-content">
+            <h3>Standard Installation</h3>
+<pre><code><span class="cmd-comment"># Install all required packages</span>
+python -m pip install -r requirements.txt</code></pre>
+
+            <h3>For Python 3.13/3.14 (Recommended)</h3>
+<pre><code><span class="cmd-comment"># Use binary wheels only (faster, avoids build errors)</span>
+python -m pip install --only-binary=:all: -r requirements.txt</code></pre>
+
+            <div class="alert alert-info">
+                <strong>📦 Key Packages Installed</strong>
+                <ul style="margin: 10px 0 0; padding-left: 20px;">
+                    <li><code>openai</code> - DIAL AI communication</li>
+                    <li><code>python-dotenv</code> - Environment variable loading</li>
+                    <li><code>psycopg2-binary</code> - PostgreSQL driver</li>
+                    <li><code>pyodbc</code> - MSSQL driver</li>
+                    <li><code>snowflake-connector-python</code> - Snowflake driver</li>
+                    <li><code>boto3</code> - AWS Athena driver</li>
+                    <li><code>pandas</code>, <code>pyyaml</code>, <code>pydantic</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 4: Install ODBC Driver -->
+    <div class="step-container">
+        <div class="step-number">4</div>
+        <h2 class="step-title">Install Microsoft ODBC Driver (For MSSQL) <span class="time-badge">5 min</span></h2>
+        <div class="step-content">
+            <p>Required only if connecting to Microsoft SQL Server:</p>
+
+            <h3>Download & Install</h3>
+            <ol>
+                <li>Visit: <a href="https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server">Microsoft ODBC Driver Downloads</a></li>
+                <li>Download <strong>ODBC Driver 18 for SQL Server</strong></li>
+                <li>Run the installer and follow the prompts</li>
+            </ol>
+
+            <h3>Verify Installation</h3>
+<pre><code><span class="cmd-comment"># Open ODBC Administrator</span>
+odbcad32
+
+<span class="cmd-comment"># Look for "ODBC Driver 18 for SQL Server" in the Drivers tab</span></code></pre>
+        </div>
+    </div>
+
+    <!-- Step 5: Configure Environment -->
+    <div class="step-container">
+        <div class="step-number">5</div>
+        <h2 class="step-title">Configure Environment Variables <span class="time-badge">10 min</span></h2>
+        <div class="step-content">
+            <h3>Create .env File</h3>
+<pre><code><span class="cmd-comment"># Copy the example file</span>
+copy .env.example .env
+
+<span class="cmd-comment"># Open in your preferred editor</span>
+notepad .env</code></pre>
+
+            <div class="alert alert-danger">
+                <strong>🔒 Security Warning</strong>
+                Never commit the <code>.env</code> file to version control. It contains sensitive credentials.
+            </div>
+
+            <div class="config-block">
+                <h4>🐘 PostgreSQL Source (SRC_1)</h4>
+<pre><code>SRC_1_TYPE=postgresql
+SRC_1_HOST=your-postgres-server.example.com
+SRC_1_PORT=5432
+SRC_1_DATABASE=your_database
+SRC_1_SCHEMA=public
+SRC_1_USERNAME=your_username
+SRC_1_PASSWORD=your_password</code></pre>
+            </div>
+
+            <div class="config-block">
+                <h4>🔷 Microsoft SQL Server Source (SRC_2)</h4>
+<pre><code>SRC_2_TYPE=mssql
+SRC_2_HOST=your-mssql-server.example.com
+SRC_2_PORT=1433
+SRC_2_DATABASE=your_database
+SRC_2_SCHEMA=dbo
+SRC_2_USERNAME=your_username
+SRC_2_PASSWORD=your_password
+SRC_2_AUTH=sql</code></pre>
+                <p style="margin-top: 10px; font-size: 14px; color: #666;">
+                    For Windows Authentication, use: <code>SRC_2_AUTH=windows</code>
+                </p>
+            </div>
+
+            <div class="config-block">
+                <h4>☁️ AWS Athena Source (SRC_3)</h4>
+<pre><code>SRC_3_TYPE=athena
+SRC_3_REGION=eu-north-1
+SRC_3_DATABASE=your_catalog_database
+SRC_3_QUERY_RESULT_LOCATION=s3://your-bucket/athena-results/
+SRC_3_USERNAME=your_aws_access_key
+SRC_3_PASSWORD=your_aws_secret_key</code></pre>
+            </div>
+
+            <div class="config-block">
+                <h4>❄️ Snowflake Target</h4>
+<pre><code>SNOWFLAKE_ACCOUNT=YOUR_ORG-YOUR_ACCOUNT
+SNOWFLAKE_DATABASE=YOUR_DATABASE
+SNOWFLAKE_SCHEMA=YOUR_SCHEMA
+SNOWFLAKE_USERNAME=your_username
+SNOWFLAKE_PASSWORD=your_password
+SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+SNOWFLAKE_ROLE=your_role</code></pre>
+                <div class="alert alert-warning" style="margin-top: 15px; margin-bottom: 0;">
+                    <strong>⚠️ Account Format</strong>
+                    Use <strong>hyphen format</strong>: <code>ORG-ACCOUNT</code> (e.g., <code>ZJAUJWQ-EP12783</code>)<br>
+                    Do NOT use dot format (<code>ORG.ACCOUNT</code>) - it will fail!
+                </div>
+            </div>
+
+            <div class="config-block">
+                <h4>🤖 AI Service (DIAL) - REQUIRED</h4>
+<pre><code>DIAL_API_KEY=your_dial_api_key
+DIAL_API_BASE=https://ai-proxy.lab.epam.com
+DIAL_API_VERSION=2025-04-01-preview
+DIAL_MODEL=gpt-4o</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 6: Verify Installation -->
+    <div class="step-container">
+        <div class="step-number">6</div>
+        <h2 class="step-title">Verify Installation <span class="time-badge">5 min</span></h2>
+        <div class="step-content">
+            <p>Run these verification tests in order:</p>
+
+            <h3>Test 1: Unit Tests (No DB/API required)</h3>
+<pre><code>python -m pytest -q
+
+<span class="cmd-output"># Expected: All tests pass
+# ......................... 25 passed in 1.23s</span></code></pre>
+
+            <h3>Test 2: Lint Configuration Files</h3>
+<pre><code>python src\validate_cli.py lint
+
+<span class="cmd-output"># Expected: No errors found</span></code></pre>
+
+            <h3>Test 3: Test Database Connections</h3>
+<pre><code>python test_env_connections.py
+
+<span class="cmd-output"># Expected Output:
+# PostgreSQL  PASS
+# MSSQL       PASS  
+# Snowflake   PASS
+# Athena      PASS</span></code></pre>
+
+            <h3>Test 4: Verify AI Service Access</h3>
+<pre><code>python src\validate_cli.py list-models
+
+<span class="cmd-output"># Expected: List of available models including gpt-4o</span></code></pre>
+
+            <div class="alert alert-success">
+                <strong>✅ Success!</strong>
+                If all tests pass, your environment is ready. You can now use the Migration Validator!
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Start -->
+    <div class="step-container">
+        <div class="step-number">7</div>
+        <h2 class="step-title">Quick Start - First Validation <span class="time-badge">5 min</span></h2>
+        <div class="step-content">
+            <h3>Launch Interactive CLI</h3>
+<pre><code>python src\validate_cli.py
+
+<span class="cmd-output"># Interactive menu will appear:
+# [1] Test Connections
+# [2] Single Table Validation
+# [3] Run Multiple Tables
+# ...</span></code></pre>
+
+            <h3>Or Run Direct Command</h3>
+<pre><code>python src\validate_cli.py generate ^
+  --source 2 ^
+  --pg-table Addresses ^
+  --sf-table ADDRESSES ^
+  --pg-schema dbo ^
+  --sf-schema YOUR_SCHEMA ^
+  --sf-database YOUR_DATABASE</code></pre>
+
+            <div class="alert alert-info">
+                <strong>📚 Next Steps</strong>
+                <ul style="margin: 10px 0 0; padding-left: 20px;">
+                    <li>Review the full documentation: <code>Migration_Validator_Documentation.html</code></li>
+                    <li>Explore architecture: <code>Architecture_Diagrams.html</code></li>
+                    <li>Check CLI commands: <code>Quick_Reference_Card.html</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Troubleshooting -->
+    <div class="step-container" style="border-left: 4px solid #dc3545;">
+        <h2 style="color: #dc3545; margin-top: 0;">🔧 Common Issues & Solutions</h2>
+        <div class="step-content">
+            <table>
+                <tr>
+                    <th>Issue</th>
+                    <th>Solution</th>
+                </tr>
+                <tr>
+                    <td><code>DIAL_API_KEY is not set</code></td>
+                    <td>Add <code>DIAL_API_KEY</code> to your .env file and ensure VPN is connected</td>
+                </tr>
+                <tr>
+                    <td>Snowflake connection fails</td>
+                    <td>Use hyphen format: <code>ORG-ACCOUNT</code>, not <code>ORG.ACCOUNT</code></td>
+                </tr>
+                <tr>
+                    <td>MSSQL Pre-Login failure</td>
+                    <td>Install Microsoft ODBC Driver 18 and verify <code>SRC_2_AUTH</code></td>
+                </tr>
+                <tr>
+                    <td><code>UnicodeEncodeError</code></td>
+                    <td>Run: <code>$env:PYTHONIOENCODING = "utf-8"</code></td>
+                </tr>
+                <tr>
+                    <td>Package build fails</td>
+                    <td>Use: <code>pip install --only-binary=:all: -r requirements.txt</code></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p><strong>Migration Validator v3.1</strong> | Environment Setup Guide</p>
+        <p>© 2026 EPAM Systems. All rights reserved.</p>
+    </div>
+
+</body>
+</html>
