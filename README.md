@@ -351,7 +351,7 @@ Every write-back:
 - Python 3.10+
 - Access to at least one source database (PostgreSQL, MSSQL, or AWS Athena)
 - Snowflake account
-- Google Gemini API key (for `gemini-3.6-flash` agent) **or** EPAM DIAL API key
+- Google Gemini API key (for `gemini-2.5-flash` agent) **or** EPAM DIAL API key
 
 ### 1. Install dependencies
 

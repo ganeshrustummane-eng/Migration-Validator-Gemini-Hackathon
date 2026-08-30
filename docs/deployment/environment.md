@@ -12,7 +12,7 @@ All configuration is via environment variables, loaded from `.env` by `python-do
 |----------|----------|---------|-------------|
 | `GOOGLE_API_KEY` | For Gemini agent | — | Google Gemini API key |
 | `GEMINI_API_KEY` | Alias | — | Alias for `GOOGLE_API_KEY` |
-| `GEMINI_MODEL` | No | `gemini-3.6-flash` | Gemini model name |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Gemini model name |
 | `DIAL_API_KEY` | For AI mapping | — | EPAM DIAL proxy API key |
 | `DIAL_API_BASE` | No | `https://ai-proxy.lab.epam.com` | DIAL endpoint |
 | `DIAL_API_VERSION` | No | `2025-04-01-preview` | DIAL API version |

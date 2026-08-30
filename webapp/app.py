@@ -1937,7 +1937,7 @@ with st.container(key="gemini_chat_panel"):
         _ai_icon, _ai_status = "✅", "success"
     elif _gemini_key:
         _mode_label = "Vertex AI" if _vertexai_configured() else "Developer API"
-        _ai_backend = f"Gemini ({_mode_label}) · " + os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        _ai_backend = f"Gemini ({_mode_label}) · " + os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         _ai_icon, _ai_status = "🤖", "success"
     else:
         _ai_backend = "Offline mode"

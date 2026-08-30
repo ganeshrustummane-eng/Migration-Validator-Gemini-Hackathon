@@ -12,7 +12,7 @@ The agent handles the full function-calling loop:
   5. Gemini synthesizes a business-oriented answer
 
 Usage:
-    agent = GeminiAgent(model="gemini-3.6-flash")
+    agent = GeminiAgent(model="gemini-2.5-flash")
     response = agent.chat("Validate the customer migration from PostgreSQL to Snowflake.")
     print(response.text)
 
@@ -29,7 +29,7 @@ Environment variables (one auth path required for online mode):
         API. Authenticates via Application Default Credentials (ADC) — no API
         key needed. Locally: `gcloud auth application-default login`. On Cloud
         Run: the service's own runtime service account is used automatically.
-    GEMINI_MODEL                      — default model (gemini-3.6-flash)
+    GEMINI_MODEL                      — default model (gemini-2.5-flash)
 """
 
 from __future__ import annotations
@@ -450,7 +450,7 @@ class GeminiAgent:
         api_key: Optional[str] = None,
         max_tool_rounds: int = 10,
     ):
-        self._model_name = model or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        self._model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self._api_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY", "")
         self._use_vertexai = _vertexai_configured()
         self._vertex_project = os.getenv("GOOGLE_CLOUD_PROJECT", "")

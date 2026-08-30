@@ -36,7 +36,7 @@ Complete each item before final submission. Check the box when done.
 - [ ] `POST /chat` returns a response with `text` and `tool_calls` fields
 - [ ] Gemini function calling loop completes without error (max 10 rounds)
 - [ ] Offline fallback (`chat_offline`) works when `GOOGLE_API_KEY` is absent
-- [ ] `GEMINI_MODEL=gemini-3.6-flash` is the correct default model ID
+- [ ] `GEMINI_MODEL=gemini-2.5-flash` is the correct default model ID
 
 ---
 

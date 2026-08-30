@@ -52,7 +52,7 @@ User receives natural language explanation
 
 ```python
 agent = GeminiAgent(
-    model="gemini-3.6-flash",      # from GEMINI_MODEL env var
+    model="gemini-2.5-flash",      # from GEMINI_MODEL env var
     api_key="...",               # from GOOGLE_API_KEY or GEMINI_API_KEY
     max_tool_rounds=10           # prevents infinite loops
 )
@@ -212,7 +212,7 @@ Each actor (`jane.doe@company.com`) gets an isolated conversation history. The `
 |---------------------|---------|-------------|
 | `GOOGLE_API_KEY` | — | Primary Gemini API key |
 | `GEMINI_API_KEY` | — | Alias for `GOOGLE_API_KEY` |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model to use |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model to use |
 
 ---
 
@@ -234,7 +234,7 @@ tools = [genai.protos.Tool(
     ]
 )]
 
-model = genai.GenerativeModel("gemini-3.6-flash", tools=tools)
+model = genai.GenerativeModel("gemini-2.5-flash", tools=tools)
 chat = model.start_chat()
 
 # Send a message
