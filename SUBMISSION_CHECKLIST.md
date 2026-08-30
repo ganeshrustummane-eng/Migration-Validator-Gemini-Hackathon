@@ -165,9 +165,11 @@ Complete each item before final submission. Check the box when done.
 - [x] Deployed connector URL is registered with Gemini Enterprise — organizer confirmed
       "agent has been added and shared with CloudGCPP-CCOEGEHmigrat-1646@epam.com" via
       `agent.json` (see [`docs/hackathon/agent.json`](docs/hackathon/agent.json)).
-      **Still to verify:** a live tool call actually succeeds end-to-end through
-      epa.ms/gemini-enterprise (not just against `localhost`) — confirm via the connector's
-      own `/audit` endpoint after asking Gemini Enterprise a question that should trigger a tool.
+      Verified end-to-end against the live Cloud Run deployment: a direct A2A
+      `message/send` call returned real connector data (Postgres/MSSQL/Athena sources,
+      Snowflake target) via [`src/gemini_connector/a2a.py`](src/gemini_connector/a2a.py),
+      2026-08-30. **Still to do:** confirm the same result via the actual
+      epa.ms/gemini-enterprise agent picker UI (not just direct curl).
 
 ---
 
