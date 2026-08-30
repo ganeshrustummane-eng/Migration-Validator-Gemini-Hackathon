@@ -285,10 +285,18 @@ async def a2a_entrypoint(request: Request):
     except Exception:
         return {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}
 
+    # Session key per A2A contextId, not a single shared constant — a hardcoded key here
+    # meant every Gemini Enterprise conversation (from any user, any thread) accumulated
+    # into the SAME GeminiAgent history forever, including stale tool-call errors from
+    # long-past turns bleeding into unrelated new questions.
+    context_id = None
+    if isinstance(body, dict):
+        context_id = ((body.get("params") or {}).get("message") or {}).get("contextId")
+    session_key = f"a2a:{context_id}" if context_id else f"a2a:oneoff:{uuid.uuid4()}"
+
     def _run_chat(text: str) -> Dict[str, Any]:
         from gemini_connector.gemini_agent import GeminiAgent, is_gemini_configured
 
-        session_key = "gemini-enterprise-a2a"
         if session_key not in _agent_cache:
             _agent_cache[session_key] = GeminiAgent()
         agent: GeminiAgent = _agent_cache[session_key]

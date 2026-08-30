@@ -257,7 +257,11 @@ def list_schemas(source_slot: str, database: str) -> Dict[str, Any]:
         elif rec["db_type"] == "mssql":
             schemas = _discover_mssql_schemas(rec["host"], int(rec.get("port", 1433)), database, rec["username"], pw, rec.get("auth", ""))
         else:
-            schemas = [rec.get("schema", "public")]
+            # Athena (and other schema-less systems) have no separate schema concept —
+            # the database itself is the schema. rec["schema"] is "" (present, not missing)
+            # when SRC_N_SCHEMA is unset, so `.get("schema", "public")` never falls back;
+            # "public" wouldn't be the right default here anyway.
+            schemas = [rec.get("schema") or database]
 
         return _ok(source_slot=source_slot, database=database, schemas=schemas)
     except Exception as exc:
