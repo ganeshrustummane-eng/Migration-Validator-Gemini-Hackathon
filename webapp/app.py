@@ -20,6 +20,8 @@ Run with:
 import difflib
 import os
 import sys
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="snowflake.connector")
 from pathlib import Path
 
 _WEBAPP_DIR = Path(__file__).parent
@@ -62,46 +64,346 @@ import results_store
 sys.path.insert(0, str(_ROOT_DIR / "token_usage_analysis"))
 from report_token_usage import _load_records as _load_token_records, _load_pricing, _cost_for
 
-st.set_page_config(page_title="Migration Validator", layout="wide")
+st.set_page_config(
+    page_title="Migration Validator · Enterprise",
+    page_icon="🔷",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# GLOBAL ENTERPRISE THEME
+# A single, coherent CSS block that covers: tab bar, metrics, buttons, forms,
+# expanders, code blocks, badges, and the chat widget.
+# Palette: indigo-600 (#4F46E5) primary, slate-900 (#0F172A) heading text,
+#          emerald-600 (#059669) success, rose-600 (#E11D48) danger,
+#          amber-500 (#F59E0B) warning — all WCAG AA against white.
+# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
+/* ── Google Fonts ─────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Root variables ───────────────────────────────────────────── */
+:root {
+    --primary:        #4F46E5;
+    --primary-light:  #818CF8;
+    --primary-xlight: #EEF2FF;
+    --success:        #059669;
+    --success-bg:     #ECFDF5;
+    --danger:         #E11D48;
+    --danger-bg:      #FFF1F2;
+    --warning:        #D97706;
+    --warning-bg:     #FFFBEB;
+    --neutral-50:     #F8FAFC;
+    --neutral-100:    #F1F5F9;
+    --neutral-200:    #E2E8F0;
+    --neutral-700:    #334155;
+    --neutral-900:    #0F172A;
+    --radius-sm:      6px;
+    --radius-md:      10px;
+    --radius-lg:      16px;
+    --shadow-sm:      0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    --shadow-md:      0 4px 12px rgba(0,0,0,.12);
+}
+
+/* ── Base font ────────────────────────────────────────────────── */
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* ── App background ───────────────────────────────────────────── */
+[data-testid="stAppViewContainer"] > .main {
+    background: #F8FAFC;
+}
+[data-testid="stSidebar"] {
+    background: #1E1B4B !important;
+    border-right: 1px solid #312E81;
+}
+[data-testid="stSidebar"] * { color: #E0E7FF !important; }
+
+/* Sidebar code blocks — keep dark background but use readable light text */
+[data-testid="stSidebar"] .stCode,
+[data-testid="stSidebar"] pre,
+[data-testid="stSidebar"] [data-testid="stCode"],
+[data-testid="stSidebar"] [data-testid="stCode"] pre,
+[data-testid="stSidebar"] [data-testid="stCode"] code {
+    background: #0F172A !important;
+    color: #BAC8FF !important;
+    border: 1px solid #312E81 !important;
+}
+
+/* Main area code blocks — light background, dark text (fixes the original issue) */
+.main .stCode,
+.main pre,
+.main [data-testid="stCode"],
+.main [data-testid="stCode"] pre,
+.main [data-testid="stCode"] code,
+[data-testid="stAppViewContainer"] > .main .stCode,
+[data-testid="stAppViewContainer"] > .main pre {
+    background: #F1F5F9 !important;
+    color: #1E293B !important;
+    border: 1px solid #E2E8F0 !important;
+}
+[data-testid="stSidebar"] .stMarkdown h1,
+[data-testid="stSidebar"] .stMarkdown h2,
+[data-testid="stSidebar"] .stMarkdown h3 { color: #C7D2FE !important; }
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: rgba(255,255,255,0.06) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* ── Tab bar ──────────────────────────────────────────────────── */
+[data-testid="stTabs"] > div:first-child {
+    border-bottom: 2px solid var(--neutral-200) !important;
+    gap: 0 !important;
+}
 [data-testid="stTab"] {
-    padding: 0.9rem 1.4rem !important;
+    padding: 0.75rem 1.25rem !important;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important;
+    border: none !important;
+    background: transparent !important;
+    transition: background 0.18s ease, color 0.18s ease !important;
 }
 [data-testid="stTab"] p {
-    font-size: 1.08rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.01rem;
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    color: var(--neutral-700) !important;
+    letter-spacing: 0.01em;
 }
-[data-testid="stTab"][aria-selected="true"] p {
-    color: #6C5CE7 !important;
+[data-testid="stTab"]:hover {
+    background: var(--primary-xlight) !important;
 }
+[data-testid="stTab"]:hover p { color: var(--primary) !important; }
 [data-testid="stTab"][aria-selected="true"] {
-    border-bottom: 3px solid #6C5CE7 !important;
+    background: white !important;
+    border-bottom: 2px solid var(--primary) !important;
+    margin-bottom: -2px !important;
 }
-</style>
-""", unsafe_allow_html=True)
+[data-testid="stTab"][aria-selected="true"] p { color: var(--primary) !important; }
 
-st.markdown("""
-<style>
-[data-testid="stTab"] {
-    font-weight: 600;
-}
-[data-testid="stTab"][aria-selected="true"] {
-    background: linear-gradient(90deg, #6C5CE7 0%, #A29BFE 100%);
-    color: white !important;
-    border-radius: 8px 8px 0 0;
-}
+/* ── Metric cards ─────────────────────────────────────────────── */
 div[data-testid="stMetric"] {
-    background: linear-gradient(135deg, #F0F1FA 0%, #E4E7FB 100%);
-    border: 1px solid #D6D8F5;
-    border-radius: 10px;
-    padding: 12px 16px;
+    background: white !important;
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 16px 20px !important;
+    box-shadow: var(--shadow-sm) !important;
 }
 div[data-testid="stMetricValue"] {
-    color: #6C5CE7;
+    color: var(--primary) !important;
+    font-size: 1.75rem !important;
+    font-weight: 700 !important;
 }
+div[data-testid="stMetricLabel"] {
+    color: var(--neutral-700) !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+div[data-testid="stMetricDelta"] { font-size: 0.78rem !important; }
+
+/* ── Buttons ──────────────────────────────────────────────────── */
+button[data-testid="baseButton-primary"] {
+    background: linear-gradient(135deg, var(--primary) 0%, #6366F1 100%) !important;
+    color: white !important; border: none !important;
+    border-radius: var(--radius-sm) !important;
+    font-weight: 600 !important; font-size: 0.875rem !important;
+    padding: 0.5rem 1.25rem !important;
+    box-shadow: 0 1px 4px rgba(79,70,229,.35) !important;
+    transition: opacity 0.15s, transform 0.1s !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+    opacity: 0.92 !important; transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(79,70,229,.45) !important;
+}
+button[data-testid="baseButton-secondary"] {
+    border: 1.5px solid var(--neutral-200) !important;
+    border-radius: var(--radius-sm) !important;
+    font-weight: 500 !important; font-size: 0.875rem !important;
+    background: white !important; color: var(--neutral-700) !important;
+    transition: border-color 0.15s, color 0.15s !important;
+}
+button[data-testid="baseButton-secondary"]:hover {
+    border-color: var(--primary) !important; color: var(--primary) !important;
+}
+
+/* ── Containers / cards ───────────────────────────────────────── */
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-radius: var(--radius-md) !important;
+    border-color: var(--neutral-200) !important;
+    box-shadow: var(--shadow-sm) !important;
+    background: white !important;
+}
+
+/* ── Expanders ────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-md) !important;
+    background: white !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+[data-testid="stExpander"] summary {
+    font-weight: 600 !important;
+    color: var(--neutral-900) !important;
+}
+
+/* ── Data tables ──────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-md) !important;
+    overflow: hidden !important;
+}
+
+/* ── Code / pre ───────────────────────────────────────────────── */
+.stCode, pre {
+    background: var(--neutral-100) !important;
+    color: var(--neutral-900) !important;
+    border: 1px solid var(--neutral-200) !important;
+    border-radius: var(--radius-sm) !important;
+    font-size: 0.82rem !important;
+}
+/* Override any Streamlit syntax-highlight container that forces dark BG */
+[data-testid="stCode"] {
+    background: var(--neutral-100) !important;
+}
+[data-testid="stCode"] pre,
+[data-testid="stCode"] code {
+    background: var(--neutral-100) !important;
+    color: #1E293B !important;
+}
+
+/* ── Alerts ───────────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+    border-radius: var(--radius-md) !important;
+    border-left-width: 4px !important;
+}
+
+/* ── Form inputs ──────────────────────────────────────────────── */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stSelectbox"] > div > div {
+    border-radius: var(--radius-sm) !important;
+    border-color: var(--neutral-200) !important;
+    font-size: 0.875rem !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(79,70,229,.15) !important;
+}
+
+/* ── Section headers inside tabs ──────────────────────────────── */
+.ent-section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin: 1.5rem 0 0.5rem; border-bottom: 2px solid var(--primary-xlight);
+    padding-bottom: 8px;
+}
+.ent-section-header h3 {
+    font-size: 1.05rem; font-weight: 700; color: var(--neutral-900); margin: 0;
+}
+
+/* ── Status badges ────────────────────────────────────────────── */
+.badge {
+    display: inline-block; padding: 2px 9px;
+    border-radius: 999px; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase;
+}
+.badge-active  { background:#D1FAE5; color:#065F46; }
+.badge-draft   { background:#EEF2FF; color:#3730A3; }
+.badge-warning { background:#FEF3C7; color:#92400E; }
+.badge-danger  { background:#FFE4E6; color:#9F1239; }
+.badge-neutral { background:#F1F5F9; color:#475569; }
+
+/* ── Rule card ────────────────────────────────────────────────── */
+.rule-card {
+    background: white; border: 1px solid var(--neutral-200);
+    border-radius: var(--radius-md); padding: 14px 18px;
+    margin-bottom: 10px; box-shadow: var(--shadow-sm);
+    display: flex; align-items: flex-start; gap: 14px;
+}
+.rule-card .rule-icon {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    background: var(--primary-xlight); display: flex; align-items: center;
+    justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+}
+.rule-card .rule-body { flex: 1; min-width: 0; }
+.rule-card .rule-id { font-size: 0.75rem; font-weight: 600; color: var(--primary); font-family: monospace; }
+.rule-card .rule-name { font-size: 0.95rem; font-weight: 700; color: var(--neutral-900); margin: 2px 0 4px; }
+.rule-card .rule-desc { font-size: 0.82rem; color: #64748B; line-height: 1.5; }
+
+/* ── Step card (guide) ────────────────────────────────────────── */
+.step-card {
+    background: white; border: 1px solid var(--neutral-200);
+    border-radius: var(--radius-md); padding: 20px 22px 18px;
+    box-shadow: var(--shadow-sm); position: relative;
+}
+.step-card .step-num {
+    position: absolute; top: -14px; left: 20px;
+    background: var(--primary); color: white; border-radius: 999px;
+    width: 28px; height: 28px; display: flex; align-items: center;
+    justify-content: center; font-size: 0.8rem; font-weight: 700;
+}
+.step-card .step-title { font-size: 1rem; font-weight: 700; color: var(--neutral-900); margin: 4px 0 8px; }
+.step-card .step-body  { font-size: 0.875rem; color: #475569; line-height: 1.65; }
+
+/* ── Workflow pill ────────────────────────────────────────────── */
+.workflow-row {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    margin: 1.5rem 0;
+}
+.workflow-pill {
+    background: var(--primary-xlight); color: var(--primary);
+    border: 1.5px solid var(--primary-light);
+    border-radius: 999px; padding: 6px 18px;
+    font-size: 0.82rem; font-weight: 700; white-space: nowrap;
+}
+.workflow-arrow { color: var(--primary-light); font-size: 1.2rem; padding: 0 6px; }
+
+/* ── Chat bubbles ─────────────────────────────────────────────── */
+.chat-bubble-user {
+    background: var(--primary); color: white;
+    border-radius: 18px 18px 4px 18px;
+    padding: 10px 14px; font-size: 0.875rem; max-width: 80%;
+    margin-left: auto; margin-bottom: 8px; box-shadow: var(--shadow-sm);
+}
+.chat-bubble-assistant {
+    background: white; color: var(--neutral-900);
+    border: 1px solid var(--neutral-200);
+    border-radius: 4px 18px 18px 18px;
+    padding: 10px 14px; font-size: 0.875rem; max-width: 88%;
+    margin-right: auto; margin-bottom: 8px; box-shadow: var(--shadow-sm);
+}
+.chat-avatar {
+    width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+}
+.chat-avatar-ai { background: var(--primary); color: white; }
+.chat-avatar-user { background: #E2E8F0; color: var(--neutral-700); }
+.chat-ts { font-size: 0.68rem; color: #94A3B8; margin-top: 3px; }
+
+/* ── Quick-action chips ───────────────────────────────────────── */
+.qa-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.qa-chip {
+    background: var(--primary-xlight); color: var(--primary);
+    border: 1.5px solid var(--primary-light); border-radius: 999px;
+    padding: 5px 14px; font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+    white-space: nowrap;
+}
+.qa-chip:hover { background: var(--primary); color: white; }
+
+/* ── Divider upgrade ──────────────────────────────────────────── */
+hr { border-color: var(--neutral-200) !important; margin: 1.5rem 0 !important; }
+
+/* ── Scrollbar ────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--neutral-100); }
+::-webkit-scrollbar-thumb { background: var(--neutral-200); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -149,6 +451,97 @@ def _style_status(df):
             return "color: #c0392b; font-weight: 600"
         return ""
     return df.style.map(_color, subset=["status"])
+
+
+def _render_diff_file(f, key_prefix: str):
+    """Render one row-level result CSV as a wide table.
+
+    Every row is shown (PASS and FAIL).  The table has:
+      col_varchar_normalized (index) | status | col_text (source) | col_text (target) | ...
+
+    PASS rows are green, FAIL/SOURCE_ONLY/TARGET_ONLY rows are red/amber.
+    Differing cells are highlighted yellow so they stand out in the wide view.
+    """
+    import pandas as pd
+    import numpy as np
+
+    try:
+        df = pd.read_csv(f)
+    except Exception as exc:
+        st.warning(f"Could not read `{f.name}`: {exc}")
+        return
+
+    n_total = len(df)
+    n_fail  = int((df["status"] != "PASS").sum()) if n_total else 0
+    n_pass  = n_total - n_fail
+    label   = f.stem.split("_result_")[0] if "_result_" in f.stem else f.stem
+
+    # Identify data columns from __source/__target pairs
+    src_col_keys = [c for c in df.columns if c.endswith("__source")]
+    data_cols    = [c[: -len("__source")] for c in src_col_keys]
+
+    # ── Build wide display DataFrame ─────────────────────────────────────────
+    # Columns: row_key | status | col1 (source) | col1 (target) | col2 ...
+    display_cols = {"row_key": df["row_key"], "status": df["status"]}
+    final_col_names = ["row_key", "status"]
+
+    for col in data_cols:
+        short = col.removesuffix("_normalized") if col.endswith("_normalized") else col
+        src_key = f"{col}__source"
+        tgt_key = f"{col}__target"
+        display_cols[f"{short} (source)"] = df[src_key].fillna("") if src_key in df.columns else ""
+        display_cols[f"{short} (target)"] = df[tgt_key].fillna("") if tgt_key in df.columns else ""
+        final_col_names += [f"{short} (source)", f"{short} (target)"]
+
+    wide = pd.DataFrame(display_cols)[final_col_names]
+
+    STATUS_BG = {"PASS": "#d4edda", "FAIL": "#f8d7da",
+                 "SOURCE_ONLY": "#fff3cd", "TARGET_ONLY": "#fff3cd"}
+    STATUS_FG = {"PASS": "#1a7f37", "FAIL": "#c0392b",
+                 "SOURCE_ONLY": "#856404", "TARGET_ONLY": "#856404"}
+
+    def _style_wide(df_in):
+        styles = pd.DataFrame("", index=df_in.index, columns=df_in.columns)
+        for i, row in df_in.iterrows():
+            row_status = row["status"]
+            bg = STATUS_BG.get(row_status, "")
+            # Colour the whole row with the row-level status background
+            styles.loc[i, :] = f"background-color: {bg}"
+            # Override status cell text colour
+            styles.loc[i, "status"] = (
+                f"background-color: {bg}; color: {STATUS_FG.get(row_status, '')}; font-weight: 700"
+            )
+            # Highlight individual cells that differ (yellow) only for FAIL rows
+            if row_status not in ("PASS",):
+                for col in data_cols:
+                    short = col.removesuffix("_normalized") if col.endswith("_normalized") else col
+                    sc, tc = f"{short} (source)", f"{short} (target)"
+                    if sc in df_in.columns and tc in df_in.columns:
+                        sv = str(row.get(sc, ""))
+                        tv = str(row.get(tc, ""))
+                        if sv != tv:
+                            styles.loc[i, sc] = f"background-color: #fff3cd; color: #856404"
+                            styles.loc[i, tc] = f"background-color: #fff3cd; color: #856404"
+        return styles
+
+    with st.expander(
+        f"**{label}** — {n_fail} row(s) FAIL / {n_pass} PASS out of {n_total}",
+        expanded=True,
+    ):
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Rows compared", n_total)
+        m2.metric("Passed", n_pass)
+        m3.metric("Failed", n_fail, delta=-n_fail if n_fail else None, delta_color="inverse")
+
+        st.caption(
+            "Each row shows source (PostgreSQL) and target (Snowflake) values side-by-side. "
+            "Green = full row matched · Red = mismatch · Yellow cell = the specific value that differed."
+        )
+        st.dataframe(
+            wide.style.apply(_style_wide, axis=None),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def render_paginated_df(df, key_prefix: str, page_size_options=(10, 25, 50, 100), style_status: bool = True):
@@ -794,11 +1187,26 @@ with st.sidebar:
 # Page
 # ---------------------------------------------------------------------------
 
-st.title("Migration Validator")
-st.caption("PostgreSQL / MSSQL / Athena → Snowflake — pick everything from live dropdowns, powered by the credentials already in .env.")
+st.markdown("""
+<div style="display:flex;align-items:center;gap:16px;padding:20px 0 8px;">
+    <div style="width:48px;height:48px;border-radius:12px;
+                background:linear-gradient(135deg,#4F46E5 0%,#818CF8 100%);
+                display:flex;align-items:center;justify-content:center;
+                font-size:1.5rem;box-shadow:0 4px 12px rgba(79,70,229,.35);flex-shrink:0;">🔷</div>
+    <div>
+        <div style="font-size:1.55rem;font-weight:800;color:#0F172A;letter-spacing:-0.02em;line-height:1.1;">
+            Migration Validator</div>
+        <div style="font-size:0.82rem;color:#64748B;margin-top:3px;font-weight:500;">
+            PostgreSQL · MSSQL · Athena &nbsp;→&nbsp; Snowflake &nbsp;|&nbsp;
+            AI-powered column mapping &nbsp;|&nbsp; Governed approval workflow
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-tab_single, tab_batch, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_guide = st.tabs(
-    ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "🚀 Run Validation", "📈 History & Trends",
+tab_single, tab_batch, tab_custom, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_guide = st.tabs(
+    ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "✍️ Custom SQL Validation",
+     "🚀 Run Validation", "📈 History & Trends",
      "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "📘 Guide"]
 )
 # 📊 Usage & Cost lives in the sidebar (see below); 🤖 Gemini Chat is a
@@ -896,6 +1304,58 @@ with tab_single:
                     default_filename=source_table,
                     key_prefix="single",
                 )
+
+        # ── Pre-generate approval check ─────────────────────────────────────────
+        # Show confidence warnings inline so the user sees them BEFORE clicking
+        # Generate — no need to visit a separate Review tab.
+        _single_rows = st.session_state.get("single_mapping_rows") or []
+        _single_low  = [r for r in _single_rows if not r.get("skip_validation") and r.get("target_column") and r.get("confidence", 1.0) < 0.75]
+        _single_none = [r for r in _single_rows if not r.get("skip_validation") and not r.get("target_column")]
+        _single_needs_review = _single_low or _single_none
+
+        if _single_needs_review and source_table and sf_table:
+            with st.container(border=True):
+                st.markdown("##### ⚠️ Review required before generating")
+                if _single_none:
+                    st.error(
+                        f"**{len(_single_none)} column(s) have no target match** — they will be skipped "
+                        f"from validation unless you fix the mapping above: "
+                        f"`{'`, `'.join(r['source_column'] for r in _single_none)}`"
+                    )
+                if _single_low:
+                    st.warning(
+                        f"**{len(_single_low)} column mapping(s) below 75% confidence** — "
+                        f"review the mapping grid above and correct any wrong suggestions before generating:\n\n"
+                        + "\n".join(
+                            f"- `{r['source_column']}` → `{r['target_column']}` "
+                            f"({int(r['confidence']*100)}% via {r.get('match_method','?')})"
+                            for r in _single_low
+                        )
+                    )
+                    _jira_col1, _jira_col2 = st.columns([3, 1])
+                    with _jira_col2:
+                        if st.button("🎫 Raise Jira ticket", key="single_jira_btn"):
+                            try:
+                                from gemini_connector.jira_client import create_ticket, is_configured, JiraNotConfiguredError
+                                if not is_configured():
+                                    st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in your `.env` to enable.")
+                                else:
+                                    _desc = (
+                                        f"Table: {source_table} → {sf_table}\n\n"
+                                        f"Low-confidence column mappings that need human review:\n"
+                                        + "\n".join(
+                                            f"  - {r['source_column']} → {r['target_column']} ({int(r['confidence']*100)}%)"
+                                            for r in _single_low
+                                        )
+                                    )
+                                    _ticket = create_ticket(
+                                        summary=f"[Migration Validator] Low-confidence mappings: {source_table} → {sf_table}",
+                                        description=_desc,
+                                        labels=["migration-validator", "needs-review"],
+                                    )
+                                    st.success(f"Jira ticket created: [{_ticket['key']}]({_ticket['url']})")
+                            except Exception as _je:
+                                st.error(f"Jira error: {_je}")
 
         if st.button("▶️ Generate SQL + YAML", type="primary", key="single_generate"):
             if not source_table or not sf_table:
@@ -1167,6 +1627,63 @@ with tab_batch:
         generate_disabled = not source_tables or not target_map or any(not t for t in target_map.values()) or (
             len(set(target_map.values())) != len(target_map)
         )
+
+        # ── Pre-generate approval check (batch) ─────────────────────────────────
+        # Aggregate low-confidence and unmatched columns across ALL tables that
+        # have been previewed, and surface them before the Generate All button.
+        _batch_issues: list = []
+        for _bt in (source_tables or []):
+            _bt_rows = st.session_state.get(f"batch_{_bt}_mapping_rows") or []
+            _bt_low  = [r for r in _bt_rows if not r.get("skip_validation") and r.get("target_column") and r.get("confidence", 1.0) < 0.75]
+            _bt_none = [r for r in _bt_rows if not r.get("skip_validation") and not r.get("target_column")]
+            if _bt_low or _bt_none:
+                _batch_issues.append({"table": _bt, "low": _bt_low, "none": _bt_none})
+
+        if _batch_issues and not generate_disabled:
+            with st.container(border=True):
+                st.markdown("##### ⚠️ Review required before generating")
+                for _bi in _batch_issues:
+                    st.markdown(f"**{_bi['table']}**")
+                    if _bi["none"]:
+                        st.error(
+                            f"No target match for: "
+                            f"`{'`, `'.join(r['source_column'] for r in _bi['none'])}` — will be skipped."
+                        )
+                    if _bi["low"]:
+                        st.warning(
+                            "Low-confidence mappings (<75%): "
+                            + ", ".join(
+                                f"`{r['source_column']}` → `{r['target_column']}` ({int(r['confidence']*100)}%)"
+                                for r in _bi["low"]
+                            )
+                        )
+                _bj_col1, _bj_col2 = st.columns([3, 1])
+                with _bj_col2:
+                    if st.button("🎫 Raise Jira tickets", key="batch_jira_btn"):
+                        try:
+                            from gemini_connector.jira_client import create_ticket, is_configured
+                            if not is_configured():
+                                st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in your `.env`.")
+                            else:
+                                _created = []
+                                for _bi in _batch_issues:
+                                    if not _bi["low"] and not _bi["none"]:
+                                        continue
+                                    _bdesc = (
+                                        f"Table: {_bi['table']}\n\n"
+                                        + (f"Unmatched: {', '.join(r['source_column'] for r in _bi['none'])}\n" if _bi["none"] else "")
+                                        + (f"Low-confidence:\n" + "\n".join(f"  - {r['source_column']} → {r['target_column']} ({int(r['confidence']*100)}%)" for r in _bi["low"]) if _bi["low"] else "")
+                                    )
+                                    _t = create_ticket(
+                                        summary=f"[Migration Validator] Low-confidence mappings: {_bi['table']}",
+                                        description=_bdesc,
+                                        labels=["migration-validator", "needs-review"],
+                                    )
+                                    _created.append(f"[{_t['key']}]({_t['url']})")
+                                st.success(f"Created {len(_created)} ticket(s): {', '.join(_created)}")
+                        except Exception as _bje:
+                            st.error(f"Jira error: {_bje}")
+
         if st.button("▶️ Generate All", type="primary", key="batch_generate", disabled=generate_disabled):
             extractor = ExtractorFactory.create(
                 src_db_type, host=rec["host"], port=int(rec.get("port") or 0),
@@ -1213,6 +1730,468 @@ with tab_batch:
                 st.success(f"Batch complete: {n_ok}/{len(results)} table(s) generated successfully.")
             else:
                 st.warning(f"Batch complete: {n_ok}/{len(results)} table(s) generated successfully — see failures above.")
+
+# =============================================================================
+# TAB: Custom SQL Validation
+# DQE writes their own source + target SQL (any join, grain, aggregation, etc.)
+# for N validations, picks PK columns, and we write the YAML directly.
+# No AI column-mapping involved — DQE owns the query.
+# =============================================================================
+with tab_custom:
+    import yaml as _yaml
+    import pandas as pd
+
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+        <div style="width:40px;height:40px;border-radius:10px;
+                    background:linear-gradient(135deg,#4F46E5,#818CF8);
+                    display:flex;align-items:center;justify-content:center;font-size:1.2rem;">✍️</div>
+        <div>
+            <div style="font-size:1.25rem;font-weight:800;color:#0F172A;">Custom SQL Validation</div>
+            <div style="font-size:0.8rem;color:#64748B;">
+                Write your own source + Snowflake SQL for any grain, join, or business logic.
+                Add as many validations as you need — each becomes one entry in the generated YAML.
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.info(
+        "Use this tab when the standard column-mapping flow isn't enough — e.g. monthly grain aggregations, "
+        "multi-table joins, dedup checks, GL line item rollups, or any DQ rule expressed as SQL. "
+        "You write both the source and Snowflake queries; we build the YAML.",
+        icon="💡",
+    )
+
+    # ── Step 1 — Connection ───────────────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**① Source connection & database/schema**")
+        cst_registry = load_registry()
+        cst_rec = select_connection(cst_registry, key="cst_conn")
+
+        if cst_rec:
+            _override_source_env(cst_rec)
+            cst_db_type = cst_rec["db_type"]
+            cst_password = source_password(cst_rec)
+
+            if cst_db_type == "athena":
+                cst_database = cst_rec["database"]
+                cst_schema = cst_rec["schema"]
+                st.caption(f"Athena: using Glue database **{cst_database}** (fixed from .env)")
+            else:
+                cst_dbs = cached_source_databases(
+                    cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
+                    cst_rec["username"], cst_password, cst_rec.get("auth", ""),
+                )
+                _cc1, _cc2 = st.columns(2)
+                with _cc1:
+                    cst_database = select_or_type("Source database", cst_dbs, cst_rec["database"], "cst_db")
+                cst_schemas = cached_source_schemas(
+                    cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
+                    cst_database, cst_rec["username"], cst_password, cst_rec.get("auth", ""),
+                )
+                with _cc2:
+                    cst_schema = select_or_type("Source schema", cst_schemas, cst_rec["schema"], "cst_schema")
+        else:
+            cst_rec = None
+            cst_database = cst_schema = cst_db_type = ""
+
+    # ── Step 2 — Snowflake target connection ──────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**② Snowflake target database/schema**")
+        cst_sf_database, cst_sf_schema, _ = pick_snowflake_target("", "cst_sf", include_table=False)
+
+    # ── Step 3 — Layer ────────────────────────────────────────────────────────
+    with st.container(border=True):
+        st.markdown("**③ Medallion layer**")
+        cst_layer, cst_output_dir = pick_layer("cst_layer")
+
+    # Session-state list of validation entries — defined here so both the
+    # AI generator (Step 4) and the manual entry grid (Step 5) can access it.
+    _CST_KEY = "cst_entries"
+    if _CST_KEY not in st.session_state:
+        st.session_state[_CST_KEY] = []
+
+    def _cst_blank_entry(idx: int) -> dict:
+        return {
+            "id": idx,
+            "name": f"validation_{idx + 1}",
+            "description": "",
+            "source_sql": "",
+            "target_sql": "",
+            "pk_source": "",
+            "pk_target": "",
+            "validation_type": "data",
+        }
+
+    # ── Step 4 — AI SQL Generator (schema-aware) ─────────────────────────────
+    st.markdown("**④ AI SQL Generator — describe what you need, AI writes the SQL**")
+    st.caption(
+        "Select tables from the source schema, describe your query in plain English "
+        "(joins across tables, aggregations, grain, DQ checks — anything). "
+        "The AI sees the full column schema of every selected table and writes "
+        "dialect-correct SQL for your source DB. Generated SQL is added to the "
+        "manual entries below for you to review and optionally pair with a Snowflake query."
+    )
+
+    with st.container(border=True):
+        # Only active once a connection + schema are picked
+        _ai_ready = bool(cst_rec and cst_schema)
+
+        if not _ai_ready:
+            st.info("Select a source connection and schema above (Steps ① and ②) to enable AI SQL generation.", icon="👆")
+        else:
+            # ── Table selector ───────────────────────────────────────────────
+            try:
+                _ai_tables = cached_source_tables(
+                    cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
+                    cst_database, cst_rec["username"], source_password(cst_rec),
+                    cst_rec.get("auth", ""), cst_rec.get("s3_output", ""), cst_schema,
+                )
+            except Exception as _exc:
+                _ai_tables = []
+                st.warning(f"Could not list tables: {_exc}")
+
+            _ait1, _ait2 = st.columns([3, 1])
+            with _ait1:
+                ai_selected_tables = st.multiselect(
+                    "Tables to include as context (select 1 or more — AI can JOIN across them)",
+                    options=_ai_tables,
+                    key="cst_ai_tables",
+                    placeholder="Pick tables…",
+                )
+            with _ait2:
+                ai_model = select_or_type(
+                    "AI model", available_models_for_ui(),
+                    os.getenv("DIAL_MODEL", "gpt-4o"),
+                    "cst_ai_model", format_func=_model_label,
+                )
+
+            # ── Schema preview ───────────────────────────────────────────────
+            if ai_selected_tables:
+                with st.expander("📋 Schema preview (what the AI sees)", expanded=False):
+                    for _tbl in ai_selected_tables:
+                        try:
+                            _cols = cached_source_columns(
+                                cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
+                                cst_database, cst_rec["username"], source_password(cst_rec),
+                                cst_rec.get("auth", ""), cst_rec.get("s3_output", ""),
+                                cst_schema, _tbl,
+                            )
+                            st.markdown(f"**{cst_schema}.{_tbl}** — {len(_cols)} column(s)")
+                            st.code(", ".join(_cols), language="text")
+                        except Exception as _e:
+                            st.warning(f"Could not load columns for {_tbl}: {_e}")
+
+            # ── Prompt ───────────────────────────────────────────────────────
+            ai_prompt = st.text_area(
+                "Describe the SQL you need (plain English)",
+                key="cst_ai_prompt",
+                height=120,
+                placeholder=(
+                    "Examples:\n"
+                    "• Show all employees with their manager's name, department name, salary, "
+                    "and years of experience (DATEDIFF from hire_date), ordered by salary descending.\n"
+                    "• Monthly total sales by region joined with the customer dimension — "
+                    "only active customers, grain = month + region.\n"
+                    "• Find duplicate email addresses across the contacts table.\n"
+                    "• Count of GL line items per account code where amount > 0, "
+                    "joined with the chart_of_accounts table."
+                ),
+            )
+
+            _ai_validation_name = st.text_input(
+                "Validation name (this becomes the entry name in the section below)",
+                value="ai_generated_check",
+                key="cst_ai_val_name",
+                placeholder="e.g. employee_manager_salary",
+            )
+
+            _aig_col1, _aig_col2 = st.columns([2, 5])
+            with _aig_col1:
+                _do_gen = st.button(
+                    "✨ Generate SQL",
+                    type="primary",
+                    key="cst_ai_generate",
+                    disabled=not (ai_selected_tables and ai_prompt.strip()),
+                )
+
+            if not ai_selected_tables:
+                st.caption("Select at least one table above to enable generation.")
+            elif not ai_prompt.strip():
+                st.caption("Describe what the query should do to enable generation.")
+
+            _AI_SQL_KEY = "cst_ai_result_sql"
+
+            if _do_gen:
+                # Build full schema context — extract column metadata for each table
+                _schema_ctx = {}
+                with st.spinner("Loading column metadata…"):
+                    for _tbl in ai_selected_tables:
+                        try:
+                            _ext = ExtractorFactory.create(
+                                cst_db_type,
+                                host=cst_rec["host"],
+                                port=int(cst_rec.get("port") or 0),
+                                database=cst_database,
+                                username=cst_rec["username"],
+                                password=source_password(cst_rec),
+                                auth=cst_rec.get("auth", ""),
+                                s3_output=cst_rec.get("s3_output", ""),
+                            )
+                            _col_metas = _ext.extract_columns(cst_schema, _tbl)
+                            _schema_ctx[f"{cst_schema}.{_tbl}"] = [
+                                {
+                                    "column_name": c.column_name,
+                                    "data_type": c.data_type,
+                                    "is_nullable": c.is_nullable,
+                                    "is_primary_key": c.is_primary_key,
+                                }
+                                for c in _col_metas
+                            ]
+                        except Exception as _exc:
+                            st.warning(f"Could not load schema for {_tbl}: {_exc}")
+
+                if _schema_ctx:
+                    with st.spinner("AI is writing your SQL…"):
+                        try:
+                            from generated_queries.ai_sql_generator import AISQLQueryGenerator, AISQLGenerationError
+                            _gen = AISQLQueryGenerator(model=ai_model)
+                            _result = _gen.generate_schema_aware_query(
+                                user_instruction=ai_prompt.strip(),
+                                schema_context=_schema_ctx,
+                                db_type=cst_db_type,
+                                default_schema=cst_schema,
+                            )
+                            st.session_state[_AI_SQL_KEY] = {
+                                "sql": _result.query,
+                                "confidence": _result.confidence,
+                                "explanation": _result.explanation,
+                                "tables": list(_schema_ctx.keys()),
+                                "prompt": ai_prompt.strip(),
+                            }
+                        except AISQLGenerationError as _exc:
+                            st.error(f"SQL generation failed: {_exc}")
+                            st.session_state.pop(_AI_SQL_KEY, None)
+                else:
+                    st.error("Could not load column schema for any selected table — check connection.")
+
+            _ai_result = st.session_state.get(_AI_SQL_KEY)
+            if _ai_result:
+                st.markdown(
+                    f"<div style='margin-top:12px;font-size:0.8rem;font-weight:600;color:#4F46E5;'>"
+                    f"Generated {cst_db_type.upper()} SQL "
+                    f"<span style='color:#059669;margin-left:8px;'>confidence {int(_ai_result['confidence']*100)}%</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                st.code(_ai_result["sql"], language="sql")
+
+                _add_col, _regen_col, _ = st.columns([2, 2, 4])
+                with _add_col:
+                    if st.button("➕ Add as validation entry below", key="cst_ai_add_entry", type="primary"):
+                        nxt = len(st.session_state.get(_CST_KEY, []))
+                        new_entry = _cst_blank_entry(nxt)
+                        new_entry["name"] = _ai_validation_name.strip().replace(" ", "_").lower() or f"ai_check_{nxt+1}"
+                        new_entry["description"] = f"AI-generated — {_ai_result['prompt'][:80]}"
+                        new_entry["source_sql"] = _ai_result["sql"]
+                        if _CST_KEY not in st.session_state:
+                            st.session_state[_CST_KEY] = []
+                        st.session_state[_CST_KEY].append(new_entry)
+                        st.session_state.pop(_AI_SQL_KEY, None)
+                        flash(f"Added '{new_entry['name']}' to validation entries below — add the Snowflake SQL there.", icon="✅")
+                        st.rerun()
+                with _regen_col:
+                    if st.button("🔄 Regenerate", key="cst_ai_regen"):
+                        st.session_state.pop(_AI_SQL_KEY, None)
+                        st.rerun()
+
+                st.info(
+                    "After adding the entry below, open it and paste or generate the matching "
+                    "**Snowflake SQL** in the right-hand pane, then set the PK column(s) for row alignment.",
+                    icon="ℹ️",
+                )
+
+    # ── Step 5 — Validation entries ───────────────────────────────────────────
+    st.markdown("**⑤ Validation entries**")
+    st.caption(
+        "Add one entry per logical check. Each entry gets its own YAML block. "
+        "Source SQL runs against your source DB; Snowflake SQL runs against your Snowflake target. "
+        "The PK column(s) are used to align rows for comparison — use the same logical key in both queries."
+    )
+
+    # Add / remove buttons
+    _btn_c1, _btn_c2 = st.columns([1, 5])
+    with _btn_c1:
+        if st.button("➕ Add validation", key="cst_add"):
+            nxt = len(st.session_state[_CST_KEY])
+            st.session_state[_CST_KEY].append(_cst_blank_entry(nxt))
+            st.rerun()
+
+    if not st.session_state[_CST_KEY]:
+        st.markdown("""
+        <div style="background:#F8FAFC;border:2px dashed #CBD5E1;border-radius:12px;
+                    padding:32px;text-align:center;color:#94A3B8;margin:16px 0;">
+            <div style="font-size:2rem;margin-bottom:8px;">📝</div>
+            <div style="font-size:0.95rem;font-weight:600;">No validations yet</div>
+            <div style="font-size:0.82rem;margin-top:4px;">
+                Click <strong>➕ Add validation</strong> above to write your first SQL check.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    to_delete = []
+    for idx, entry in enumerate(st.session_state[_CST_KEY]):
+        entry_key = f"cst_entry_{idx}"
+        with st.expander(
+            f"**{entry['name'] or f'Validation {idx+1}'}** — {entry.get('description','') or 'click to expand'}",
+            expanded=True,
+        ):
+            _e1, _e2, _e3 = st.columns([3, 4, 1])
+            with _e1:
+                entry["name"] = st.text_input(
+                    "Validation name (used as YAML key)",
+                    value=entry["name"], key=f"{entry_key}_name",
+                    placeholder="e.g. monthly_sales_grain",
+                )
+            with _e2:
+                entry["description"] = st.text_input(
+                    "Description (optional)",
+                    value=entry["description"], key=f"{entry_key}_desc",
+                    placeholder="e.g. Monthly sales by region, joined with dim_customer",
+                )
+            with _e3:
+                entry["validation_type"] = st.selectbox(
+                    "Type", ["data", "count"], key=f"{entry_key}_vtype",
+                    index=0 if entry["validation_type"] == "data" else 1,
+                    help="data = row-level diff with PK alignment; count = row count only",
+                )
+
+            _s1, _s2 = st.columns(2)
+            with _s1:
+                st.markdown(
+                    f"<div style='font-size:0.8rem;font-weight:600;color:#4F46E5;margin-bottom:4px;'>"
+                    f"Source SQL ({_DB_TYPE_LABELS.get(cst_db_type, cst_db_type) or 'source'})"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                entry["source_sql"] = st.text_area(
+                    "Source SQL",
+                    value=entry["source_sql"], key=f"{entry_key}_src_sql",
+                    height=220,
+                    placeholder=(
+                        "SELECT\n"
+                        "    DATE_TRUNC('month', order_date) AS month,\n"
+                        "    region,\n"
+                        "    SUM(amount)                    AS total_sales\n"
+                        "FROM sales s\n"
+                        "JOIN dim_customer c ON s.customer_id = c.id\n"
+                        "GROUP BY 1, 2"
+                    ),
+                    label_visibility="collapsed",
+                )
+            with _s2:
+                st.markdown(
+                    "<div style='font-size:0.8rem;font-weight:600;color:#059669;margin-bottom:4px;'>"
+                    "Snowflake SQL (target)"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+                entry["target_sql"] = st.text_area(
+                    "Snowflake SQL",
+                    value=entry["target_sql"], key=f"{entry_key}_tgt_sql",
+                    height=220,
+                    placeholder=(
+                        "SELECT\n"
+                        "    DATE_TRUNC('month', ORDER_DATE) AS MONTH,\n"
+                        "    REGION,\n"
+                        "    SUM(AMOUNT)                     AS TOTAL_SALES\n"
+                        "FROM DWH.SALES S\n"
+                        "JOIN DWH.DIM_CUSTOMER C ON S.CUSTOMER_ID = C.ID\n"
+                        "GROUP BY 1, 2"
+                    ),
+                    label_visibility="collapsed",
+                )
+
+            if entry["validation_type"] == "data":
+                _pk1, _pk2 = st.columns(2)
+                with _pk1:
+                    entry["pk_source"] = st.text_input(
+                        "Source PK column(s) — comma-separated if composite",
+                        value=entry["pk_source"], key=f"{entry_key}_pk_src",
+                        placeholder="e.g. month, region",
+                    )
+                with _pk2:
+                    entry["pk_target"] = st.text_input(
+                        "Snowflake PK column(s) — must align with source PK",
+                        value=entry["pk_target"], key=f"{entry_key}_pk_tgt",
+                        placeholder="e.g. MONTH, REGION",
+                    )
+
+            if st.button("🗑️ Remove this validation", key=f"{entry_key}_del", type="secondary"):
+                to_delete.append(idx)
+
+    if to_delete:
+        for idx in sorted(to_delete, reverse=True):
+            st.session_state[_CST_KEY].pop(idx)
+        st.rerun()
+
+    # ── Step 6 — YAML preview + save ─────────────────────────────────────────
+    st.divider()
+    entries = st.session_state.get(_CST_KEY, [])
+    valid_entries = [e for e in entries if e.get("source_sql", "").strip() and e.get("target_sql", "").strip() and e.get("name", "").strip()]
+
+    if valid_entries and cst_rec:
+        src_key = f"src_{cst_rec['index']}"
+        _yaml_blocks = {}
+        for e in valid_entries:
+            vname = e["name"].strip().replace(" ", "_").lower()
+            block = {
+                "source": src_key,
+                "sourcequery": e["source_sql"].strip(),
+                "target": "snowflake",
+                "targetquery": e["target_sql"].strip(),
+            }
+            if e["validation_type"] == "data":
+                pk_src = [c.strip() for c in e["pk_source"].split(",") if c.strip()]
+                pk_tgt = [c.strip() for c in e["pk_target"].split(",") if c.strip()]
+                if pk_src:
+                    block["pksourcecolumn"] = pk_src if len(pk_src) > 1 else pk_src[0]
+                if pk_tgt:
+                    block["pktargetcolumn"] = pk_tgt if len(pk_tgt) > 1 else pk_tgt[0]
+            _yaml_blocks[vname] = block
+
+        vtype_folder = "data_validation"
+        # Use first entry name as the YAML file stem, or a generic name
+        yaml_stem = valid_entries[0]["name"].strip().replace(" ", "_").lower() if len(valid_entries) == 1 else "custom_validations"
+        yaml_payload = {"tables": {yaml_stem: {"validations": _yaml_blocks}}}
+
+        yaml_str = _yaml.dump(yaml_payload, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+        with st.expander("📄 YAML preview", expanded=True):
+            st.code(yaml_str, language="yaml")
+
+        _save_c1, _save_c2 = st.columns([2, 4])
+        with _save_c1:
+            custom_yaml_filename = st.text_input(
+                "Output filename (without .yaml)",
+                value=yaml_stem, key="cst_yaml_filename",
+            )
+        with _save_c2:
+            st.markdown("<div style='height:28px'/>", unsafe_allow_html=True)
+            if st.button("💾 Save YAML to config folder", type="primary", key="cst_save"):
+                save_path = cst_output_dir / vtype_folder / f"{custom_yaml_filename}.yaml"
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                save_path.write_text(yaml_str, encoding="utf-8")
+                flash(f"Saved: {save_path}", icon="💾")
+                st.rerun()
+
+    elif entries and not valid_entries:
+        st.warning("Fill in at least a name + source SQL + Snowflake SQL to preview the YAML.")
+    elif not entries:
+        pass  # empty state already shown above
+    elif not cst_rec:
+        st.warning("Select a source connection above before saving.")
 
 # =============================================================================
 # TAB: Run Validation — execute the generated YAMLs (Project/main.py) and
@@ -1321,17 +2300,10 @@ with tab_execute:
 
                 if result["diff_files"]:
                     with st.container(border=True):
-                        st.markdown("#### 🔍 Mismatch detail — row-level diffs")
-                        st.caption("Local files only — never sent to any AI/LLM.")
+                        st.markdown("#### 🔍 Data validation — row-level results")
+                        st.caption("Every row is shown — green = matched, red = differed. Local files only, never sent to any AI/LLM.")
                         for f in result["diff_files"]:
-                            try:
-                                diff_df = pd.read_csv(f)
-                                n_rows = len(diff_df)
-                            except Exception as exc:
-                                st.warning(f"Could not read `{f.name}`: {exc}")
-                                continue
-                            with st.expander(f"`{f.relative_to(_PROJECT_DIR)}` — {n_rows} mismatched row(s)", expanded=False):
-                                render_paginated_df(diff_df, key_prefix=f"exec_diff_{f.stem}", style_status=False)
+                            _render_diff_file(f, key_prefix=f"exec_diff_{f.stem}")
 
                 if not result["summaries"]:
                     with st.expander("Raw stdout/stderr (no summary was produced)", expanded=True):
@@ -1426,231 +2398,305 @@ with tab_history:
 # TAB: Rule Book
 # =============================================================================
 with tab_rules:
-    st.subheader("Rule book")
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;">
+        <div style="width:40px;height:40px;border-radius:10px;
+                    background:linear-gradient(135deg,#4F46E5,#818CF8);
+                    display:flex;align-items:center;justify-content:center;font-size:1.2rem;">📖</div>
+        <div>
+            <div style="font-size:1.25rem;font-weight:800;color:#0F172A;">Rule Book</div>
+            <div style="font-size:0.8rem;color:#64748B;">Type-mapping normalization rules — base (always on) and learned (activate to enable)</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Stat chips ────────────────────────────────────────────────────────────
     stats = rule_book.stats()
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Base rules", stats["base_rules"])
-    m2.metric("Learned rules", stats["learned_rules"])
-    m3.metric("Total", stats["total_rules"])
+    _rs1, _rs2, _rs3, _rs4 = st.columns(4)
+    _rs1.metric("Base rules", stats["base_rules"], help="Code-defined, always run first")
+    _rs2.metric("Learned — active", sum(1 for r in rule_book.learned_rules() if r.status == "active"),
+                help="Gap fillers — only for type pairs without a base rule")
+    _rs3.metric("Learned — draft", sum(1 for r in rule_book.learned_rules() if r.status != "active"),
+                help="Advisory only — never affect generated SQL until activated")
+    _rs4.metric("Total", stats["total_rules"])
 
-    with st.expander("ℹ️ What is a Base rule, a Draft rule, and an Active rule?", expanded=False):
-        st.markdown(
-            "- **Base rule** — built into the code (`src/rules/postgres_base_rules.py`). Always used first for "
-            "any type pair (e.g. `NUMERIC → NUMBER`). It can never be overridden or hidden by anything below.\n"
-            "- **Draft rule** — a *learned* rule that has been saved but not yet approved. It's advisory only: "
-            "it's shown here and given to the AI as extra context, but it is **never used to generate real SQL**. "
-            "Every new rule (from the AI paste tool or the manual form) starts as a draft.\n"
-            "- **Active rule** — a draft rule that someone reviewed and clicked **Activate** on. Only then can it "
-            "actually be used — and only as a *gap filler*, for a type pair that no base rule already covers. "
-            "It can never replace or shadow a base rule.\n\n"
-            "**In short:** Base rules always run. Draft rules never run — activate a draft to let it run."
+    # ── Concept explainer ─────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="background:#F0F4FF;border:1px solid #C7D2FE;border-radius:10px;padding:14px 18px;margin:12px 0;">
+    <div style="font-weight:700;color:#3730A3;margin-bottom:8px;">📌 How rules work</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:0.82rem;color:#334155;">
+        <div style="background:white;border-radius:8px;padding:10px 12px;border:1px solid #E0E7FF;">
+            <div style="font-weight:700;color:#059669;margin-bottom:4px;">🔒 Base rule</div>
+            Built into <code>postgres_base_rules.py</code>. Always runs first for a type pair.
+            <b>Nothing can shadow or override it.</b>
+        </div>
+        <div style="background:white;border-radius:8px;padding:10px 12px;border:1px solid #E0E7FF;">
+            <div style="font-weight:700;color:#6366F1;margin-bottom:4px;">📝 Draft rule</div>
+            Saved but not active. Fed to AI as context only.
+            <b>Never affects real SQL generation.</b>
+        </div>
+        <div style="background:white;border-radius:8px;padding:10px 12px;border:1px solid #E0E7FF;">
+            <div style="font-weight:700;color:#D97706;margin-bottom:4px;">⚡ Active rule</div>
+            A reviewed draft you activated. Acts as a <b>gap filler</b> for type pairs
+            with no base rule — cannot replace base rules.
+        </div>
+    </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Sub-tabs ───────────────────────────────────────────────────────────────
+    _rb_base_tab, _rb_learned_tab, _rb_add_tab = st.tabs(
+        ["🔒 Base Rules", "⚡ Learned Rules", "➕ Add Rule"]
+    )
+
+    # ── BASE RULES sub-tab ────────────────────────────────────────────────────
+    with _rb_base_tab:
+        st.caption(
+            "Read-only — always checked first for any type pair. The SQL shown is the **actual expression** "
+            "run against real data. Read it, don't just the description."
         )
 
-    def rule_rows(entries):
-        rows = []
-        for e in entries:
-            sample_col = "amount" if "numeric" in e.id or "integer" in e.id else "col"
-            rows.append({
-                "ID": e.id, "Name": e.display_name,
-                "Source type": e.source_type, "Target type": e.target_type,
-                "Source SQL (example)": e.pg_sql_template.replace("{col}", sample_col) if e.pg_sql_template else "",
-                "Snowflake SQL (example)": e.sf_sql_template.replace("{col}", sample_col) if e.sf_sql_template else "",
-                "Description": e.description,
-            })
-        return rows
+        st.markdown("""
+        <div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:0.83rem;color:#78350F;">
+        <b>Key rules to know:</b>
+        &nbsp;·&nbsp; <b>Numeric/Decimal</b> — cast to text at native precision (no rounding — drift surfaces as FAIL).
+        &nbsp;·&nbsp; <b>Timestamp TZ</b> — converted to UTC first, then microsecond-formatted.
+        &nbsp;·&nbsp; <b>UUID</b> — UPPER(TRIM()) normalised — genuine case differences still FAIL.
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("**Base rules** (code-defined, `src/rules/postgres_base_rules.py`)")
-    st.caption(
-        "Always checked first for any type pair — a learned rule below can never shadow or change one of these. "
-        "The SQL columns below are the ACTUAL expression run against real data — read those, not just the description, "
-        "to confirm a rule does what you expect."
-    )
-    st.info(
-        "**How the key rules work:**\n"
-        "- **Numeric / Decimal** — cast to text at full native precision. No rounding is applied, so any real "
-        "precision drift between source and target shows up as a mismatch instead of being hidden.\n"
-        "- **Timestamp / Timestamp TZ** — formatted to microsecond precision (`.US` / `.FF6` / `.ffffff` depending "
-        "on dialect). Timezone-aware values are converted to UTC first, then formatted; fractional seconds are "
-        "always compared, never stripped.\n"
-        "- **UUID** — cast to text and trimmed only. Case is compared exactly as stored — it is NOT normalized to "
-        "upper/lowercase, so a genuine case difference between source and target will surface as a mismatch.\n\n",
-        icon="📌",
-    )
-    st.dataframe(rule_rows(rule_book.base_rules()), width='stretch', hide_index=True)
+        # Search filter
+        _rb_search = st.text_input("🔍 Filter rules", placeholder="e.g. uuid, timestamp, numeric…", key="rb_search", label_visibility="collapsed")
 
-    st.markdown("**Learned rules** (`src/rule_book_learned.json`)")
-    st.caption(
-        "Draft = advisory only (AI prompt context), never affects generated SQL. "
-        "Active = also used as a gap filler for type pairs no base rule owns — click Activate to promote one."
-    )
-    learned = rule_book.learned_rules()
-    if learned:
-        for r in learned:
-            lc1, lc2, lc3, lc4, lc5 = st.columns([2, 2, 2, 1, 1])
-            lc1.write(f"**{r.id}**")
-            lc2.write(f"{r.source_type} → {r.target_type}")
-            lc3.write(f"reuses: `{r.reuses_rule}`" if r.reuses_rule else "_advisory only_")
-            if r.status == "active":
-                lc4.success("active", icon="✅")
-            else:
-                lc4.info("draft", icon="📝")
-            with lc5:
-                if r.status == "active":
-                    if st.button("Deactivate", key=f"deact_{r.id}"):
-                        rule_book.deactivate_learned_rule(r.id)
-                        st.rerun()
-                elif r.reuses_rule:
-                    if st.button("Activate", key=f"act_{r.id}"):
-                        rule_book.activate_learned_rule(r.id)
-                        flash(f"'{r.id}' is now active — used as a gap filler for {r.source_type} → {r.target_type}.", icon="✅")
-                        st.rerun()
-                else:
-                    st.caption("no base rule to reuse — advisory only")
-    else:
-        st.caption("No learned rules yet.")
+        def rule_rows(entries):
+            rows = []
+            for e in entries:
+                sample_col = "amount" if "numeric" in e.id or "integer" in e.id else "col"
+                rows.append({
+                    "ID": e.id, "Name": e.display_name,
+                    "Source type": e.source_type, "Target type": e.target_type,
+                    "Source SQL": e.pg_sql_template.replace("{col}", sample_col) if e.pg_sql_template else "",
+                    "Snowflake SQL": e.sf_sql_template.replace("{col}", sample_col) if e.sf_sql_template else "",
+                    "Description": e.description,
+                })
+            return rows
 
-    st.divider()
-    st.markdown("**Add rules from a pasted table (AI-assisted)**")
-    st.caption(
-        "Paste any type-mapping table or free text (e.g. `nvarchar -> TEXT`, or a full "
-        "MSSQL/Postgres → Snowflake table). The AI can only ever reuse an EXISTING base "
-        "rule's already-tested behavior — it cannot invent new SQL. Rows it can't confidently "
-        "match are flagged for you to resolve manually."
-    )
-    raw_rules_text = st.text_area(
-        "Paste type mappings here", height=140, key="rule_paste_text",
-        placeholder="bit (0,1)      -> BOOLEAN\nmoney          -> NUMBER\nnvarchar       -> TEXT\ntimestamp      -> BINARY",
-    )
-    rule_parse_model = select_or_type(
-        "AI model for parsing", available_models_for_ui(), os.getenv("DIAL_MODEL", "gpt-4o"),
-        "rule_parse_model", format_func=_model_label,
-    )
+        _base = rule_book.base_rules()
+        if _rb_search:
+            _q = _rb_search.lower()
+            _base = [r for r in _base if _q in r.id.lower() or _q in (r.source_type or "").lower()
+                     or _q in (r.display_name or "").lower()]
 
-    if st.button("✨ Parse with AI", key="parse_rules_btn"):
-        if not raw_rules_text.strip():
-            st.error("Paste some type mappings first.")
-        else:
-            with st.spinner("Parsing pasted rules..."):
-                try:
-                    parser = RuleTypeParser(model=rule_parse_model)
-                    proposals = parser.parse(raw_rules_text, rule_book.base_rule_ids())
-                    st.session_state["rule_proposals"] = proposals
-                except (AIRuleMappingError, RuleParseError) as exc:
-                    st.error(f"Could not parse: {exc}")
-                    st.session_state.pop("rule_proposals", None)
-
-    proposals = st.session_state.get("rule_proposals")
-    if proposals:
-        import pandas as pd
-
-        def _covered(source_type: str, target_type: str) -> bool:
-            from rules import get_rule_for_type_specific
-            return get_rule_for_type_specific(source_type, target_type) is not None
-
-        rows = []
-        for p in proposals:
-            covered = _covered(p.source_type, p.target_type)
-            status = "already covered" if covered else ("needs review" if p.needs_review else "new — will save")
-            rows.append({
-                "Save": (not covered) and not p.needs_review,
-                "Source type": p.source_type,
-                "Target type": p.target_type,
-                "Dialect": p.dialect,
-                "Reuses rule": p.reuses_rule or "",
-                "Confidence": p.confidence,
-                "Status": status,
-                "Note": p.note,
-            })
-        df = pd.DataFrame(rows)
-
-        edited = st.data_editor(
-            df,
+        st.dataframe(
+            rule_rows(_base),
+            use_container_width=True,
+            hide_index=True,
             column_config={
-                "Save": st.column_config.CheckboxColumn(help="Only rows with a matched base rule and no review flag can be saved."),
-                "Source type": st.column_config.TextColumn(disabled=True),
-                "Target type": st.column_config.TextColumn(disabled=True),
-                "Dialect": st.column_config.TextColumn(disabled=True),
-                "Reuses rule": st.column_config.SelectboxColumn(options=[""] + rule_book.base_rule_ids()),
-                "Confidence": st.column_config.NumberColumn(disabled=True, format="%.2f"),
-                "Status": st.column_config.TextColumn(disabled=True),
-                "Note": st.column_config.TextColumn(disabled=True),
+                "Source SQL":    st.column_config.TextColumn(width="large"),
+                "Snowflake SQL": st.column_config.TextColumn(width="large"),
+                "Description":   st.column_config.TextColumn(width="medium"),
             },
-            hide_index=True, width='stretch', key="rule_proposal_editor",
         )
 
-        if st.button("💾 Save checked rows as draft rules", key="save_rule_proposals"):
-            import datetime as _dt
-            import re as _re
-            saved, skipped = 0, 0
-            for _, row in edited.iterrows():
-                if not row["Save"]:
-                    continue
-                if not row["Reuses rule"]:
-                    skipped += 1
-                    continue
-                slug = _re.sub(r"[^a-z0-9]+", "_", f"{row['Dialect']}_{row['Source type']}_{row['Target type']}".lower()).strip("_")
-                entry = RuleEntry(
-                    id=f"prompt_{slug}",
-                    display_name=f"{row['Source type']} -> {row['Target type']} ({row['Dialect']})",
-                    description=row["Note"] or f"Reuses '{row['Reuses rule']}' rule via AI-assisted paste.",
-                    when_to_apply=f"source_type={row['Source type']}, target_type={row['Target type']}, dialect={row['Dialect']}",
-                    pg_sql_template="", sf_sql_template="",
-                    source_type=row["Source type"], target_type=row["Target type"],
-                    reuses_rule=row["Reuses rule"],
-                    learned_at=_dt.date.today().isoformat(),
-                )
-                try:
-                    if rule_book.save_learned_rule(entry):
-                        saved += 1
-                except RuleValidationError as exc:
-                    st.error(f"'{row['Source type']} → {row['Target type']}' rejected: {exc}")
-                    skipped += 1
-            if saved:
-                flash(f"Saved {saved} rule(s) as draft — activate them above to make them live.", icon="📖")
-                st.session_state.pop("rule_proposals", None)
-                st.rerun()
-            elif skipped:
-                st.warning("Nothing saved — check that at least one row has 'Save' checked and a 'Reuses rule' chosen.")
+    # ── LEARNED RULES sub-tab ─────────────────────────────────────────────────
+    with _rb_learned_tab:
+        learned = rule_book.learned_rules()
+        if not learned:
+            st.markdown("""
+            <div style="text-align:center;padding:48px 24px;color:#94A3B8;">
+                <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+                <div style="font-weight:600;font-size:1rem;margin-bottom:4px;">No learned rules yet</div>
+                <div style="font-size:0.82rem;">Use the <b>Add Rule</b> tab to paste a type-mapping table
+                or fill in the form manually.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            _active_rules  = [r for r in learned if r.status == "active"]
+            _draft_rules   = [r for r in learned if r.status != "active"]
 
-    st.divider()
-    st.markdown("**Add a custom (learned) rule manually**")
-    st.caption("New rules start as draft (advisory only) — activate them above to make them live gap fillers.")
-    with st.form("add_rule_form"):
-        c1, c2 = st.columns(2)
-        rule_id = c1.text_input("Rule id (snake_case)")
-        display_name = c2.text_input("Display name")
-        description = st.text_area("Description")
-        when_to_apply = st.text_input("When to apply (e.g. 'source=VARCHAR maps to target=STRING')")
-        c3, c4 = st.columns(2)
-        source_type = c3.text_input("Source type (e.g. VARCHAR)")
-        target_type = c4.text_input("Target type (e.g. STRING)")
-        c5, c6 = st.columns(2)
-        pg_sql_template = c5.text_input("Source SQL template (use {col})")
-        sf_sql_template = c6.text_input("Snowflake SQL template (use {col})")
-        submitted = st.form_submit_button("Save learned rule")
+            if _active_rules:
+                st.markdown("##### ⚡ Active — used as gap fillers")
+                for r in _active_rules:
+                    with st.container(border=True):
+                        _la, _lb, _lc, _ld = st.columns([3, 2, 2, 1])
+                        with _la:
+                            st.markdown(f"`{r.id}`")
+                            st.caption(r.description or "")
+                        _lb.markdown(f"**{r.source_type}** → **{r.target_type}**")
+                        _lc.markdown(f"Reuses `{r.reuses_rule}`" if r.reuses_rule else "_No base rule_")
+                        with _ld:
+                            st.markdown('<span class="badge badge-active">ACTIVE</span>', unsafe_allow_html=True)
+                            if st.button("Deactivate", key=f"deact_{r.id}", type="secondary"):
+                                rule_book.deactivate_learned_rule(r.id)
+                                st.rerun()
 
-        if submitted:
-            if not rule_id or not display_name:
-                st.error("Rule id and display name are required.")
-            else:
-                import datetime
-                entry = RuleEntry(
-                    id=rule_id, display_name=display_name, description=description,
-                    when_to_apply=when_to_apply, pg_sql_template=pg_sql_template,
-                    sf_sql_template=sf_sql_template, source_type=source_type,
-                    target_type=target_type, is_learned=True,
-                    learned_at=datetime.date.today().isoformat(),
+            if _draft_rules:
+                st.markdown("##### 📝 Draft — advisory only (activate to use)")
+                for r in _draft_rules:
+                    with st.container(border=True):
+                        _la, _lb, _lc, _ld = st.columns([3, 2, 2, 1])
+                        with _la:
+                            st.markdown(f"`{r.id}`")
+                            st.caption(r.description or "")
+                        _lb.markdown(f"**{r.source_type}** → **{r.target_type}**")
+                        _lc.markdown(f"Reuses `{r.reuses_rule}`" if r.reuses_rule else "_No base rule_")
+                        with _ld:
+                            st.markdown('<span class="badge badge-draft">DRAFT</span>', unsafe_allow_html=True)
+                            if r.reuses_rule:
+                                if st.button("Activate", key=f"act_{r.id}", type="primary"):
+                                    rule_book.activate_learned_rule(r.id)
+                                    flash(f"'{r.id}' is now active — gap filler for {r.source_type} → {r.target_type}.", icon="✅")
+                                    st.rerun()
+                            else:
+                                st.caption("advisory only")
+
+    # ── ADD RULE sub-tab ──────────────────────────────────────────────────────
+    with _rb_add_tab:
+        _add_ai_tab, _add_manual_tab = st.tabs(["✨ AI-assisted paste", "✏️ Manual form"])
+
+        with _add_ai_tab:
+            st.markdown("""
+            <div style="font-size:0.85rem;color:#475569;margin-bottom:10px;">
+            Paste any type-mapping table or free text — e.g. <code>nvarchar → TEXT</code>, or a full
+            MSSQL/Postgres → Snowflake mapping list. The AI <b>can only reuse an existing base rule's
+            SQL</b> — it cannot invent new SQL. Rows it can't match are flagged for manual resolution.
+            </div>
+            """, unsafe_allow_html=True)
+
+            raw_rules_text = st.text_area(
+                "Paste type mappings", height=130, key="rule_paste_text",
+                placeholder="bit (0,1)      -> BOOLEAN\nmoney          -> NUMBER\nnvarchar       -> TEXT\ntimestamp      -> BINARY",
+                label_visibility="collapsed",
+            )
+            _rp_col1, _rp_col2 = st.columns([3, 1])
+            with _rp_col1:
+                rule_parse_model = select_or_type(
+                    "AI model", available_models_for_ui(), os.getenv("DIAL_MODEL", "gpt-4o"),
+                    "rule_parse_model", format_func=_model_label,
                 )
-                try:
-                    ok = rule_book.save_learned_rule(entry)
-                except RuleValidationError as exc:
-                    st.error(f"Rejected: {exc}")
-                    ok = None
-                if ok:
-                    flash(f"Learned rule '{rule_id}' saved to rule_book_learned.json", icon="📖")
-                    st.rerun()
-                elif ok is not None:
-                    st.error("Could not save — a rule with this id may already exist.")
+            with _rp_col2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("✨ Parse with AI", key="parse_rules_btn", type="primary", use_container_width=True):
+                    if not raw_rules_text.strip():
+                        st.error("Paste some type mappings first.")
+                    else:
+                        with st.spinner("Parsing pasted rules…"):
+                            try:
+                                parser = RuleTypeParser(model=rule_parse_model)
+                                proposals = parser.parse(raw_rules_text, rule_book.base_rule_ids())
+                                st.session_state["rule_proposals"] = proposals
+                            except (AIRuleMappingError, RuleParseError) as exc:
+                                st.error(f"Could not parse: {exc}")
+                                st.session_state.pop("rule_proposals", None)
+
+            proposals = st.session_state.get("rule_proposals")
+            if proposals:
+                import pandas as pd
+
+                def _covered(source_type: str, target_type: str) -> bool:
+                    from rules import get_rule_for_type_specific
+                    return get_rule_for_type_specific(source_type, target_type) is not None
+
+                rows = []
+                for p in proposals:
+                    covered = _covered(p.source_type, p.target_type)
+                    status = "already covered" if covered else ("needs review" if p.needs_review else "new — will save")
+                    rows.append({
+                        "Save": (not covered) and not p.needs_review,
+                        "Source type": p.source_type, "Target type": p.target_type,
+                        "Dialect": p.dialect, "Reuses rule": p.reuses_rule or "",
+                        "Confidence": p.confidence, "Status": status, "Note": p.note,
+                    })
+                df = pd.DataFrame(rows)
+                st.markdown(f"**{len(proposals)} mapping(s) parsed** — check rows to save as draft rules:")
+                edited = st.data_editor(
+                    df,
+                    column_config={
+                        "Save": st.column_config.CheckboxColumn(help="Only rows with a matched base rule and no review flag can be saved."),
+                        "Source type": st.column_config.TextColumn(disabled=True),
+                        "Target type": st.column_config.TextColumn(disabled=True),
+                        "Dialect": st.column_config.TextColumn(disabled=True),
+                        "Reuses rule": st.column_config.SelectboxColumn(options=[""] + rule_book.base_rule_ids()),
+                        "Confidence": st.column_config.NumberColumn(disabled=True, format="%.2f"),
+                        "Status": st.column_config.TextColumn(disabled=True),
+                        "Note": st.column_config.TextColumn(disabled=True),
+                    },
+                    hide_index=True, use_container_width=True, key="rule_proposal_editor",
+                )
+
+                if st.button("💾 Save checked rows as draft rules", key="save_rule_proposals", type="primary"):
+                    import datetime as _dt
+                    import re as _re
+                    saved, skipped = 0, 0
+                    for _, row in edited.iterrows():
+                        if not row["Save"]:
+                            continue
+                        if not row["Reuses rule"]:
+                            skipped += 1
+                            continue
+                        slug = _re.sub(r"[^a-z0-9]+", "_", f"{row['Dialect']}_{row['Source type']}_{row['Target type']}".lower()).strip("_")
+                        entry = RuleEntry(
+                            id=f"prompt_{slug}",
+                            display_name=f"{row['Source type']} -> {row['Target type']} ({row['Dialect']})",
+                            description=row["Note"] or f"Reuses '{row['Reuses rule']}' rule via AI-assisted paste.",
+                            when_to_apply=f"source_type={row['Source type']}, target_type={row['Target type']}, dialect={row['Dialect']}",
+                            pg_sql_template="", sf_sql_template="",
+                            source_type=row["Source type"], target_type=row["Target type"],
+                            reuses_rule=row["Reuses rule"],
+                            learned_at=_dt.date.today().isoformat(),
+                        )
+                        try:
+                            if rule_book.save_learned_rule(entry):
+                                saved += 1
+                        except RuleValidationError as exc:
+                            st.error(f"'{row['Source type']} → {row['Target type']}' rejected: {exc}")
+                            skipped += 1
+                    if saved:
+                        flash(f"Saved {saved} rule(s) as draft — activate them in the Learned Rules tab.", icon="📖")
+                        st.session_state.pop("rule_proposals", None)
+                        st.rerun()
+                    elif skipped:
+                        st.warning("Nothing saved — check that at least one row has 'Save' checked and a 'Reuses rule' chosen.")
+
+        with _add_manual_tab:
+            st.caption("New rules start as **draft** (advisory only) — go to Learned Rules and click Activate to make them live gap fillers.")
+            with st.form("add_rule_form", border=False):
+                _mf1, _mf2 = st.columns(2)
+                rule_id      = _mf1.text_input("Rule ID (snake_case)", placeholder="mssql_money_to_number")
+                display_name = _mf2.text_input("Display name", placeholder="MONEY → NUMBER")
+                description  = st.text_area("Description", height=80, placeholder="What this rule does and when to apply it")
+                when_to_apply = st.text_input("When to apply", placeholder="source=MONEY, target=NUMBER, dialect=mssql")
+                _mf3, _mf4   = st.columns(2)
+                source_type  = _mf3.text_input("Source type", placeholder="MONEY")
+                target_type  = _mf4.text_input("Target type", placeholder="NUMBER")
+                _mf5, _mf6   = st.columns(2)
+                pg_sql_template = _mf5.text_input("Source SQL template", placeholder="CAST({col} AS NUMERIC)")
+                sf_sql_template = _mf6.text_input("Snowflake SQL template", placeholder="CAST({col} AS NUMBER)")
+                submitted = st.form_submit_button("💾 Save as draft rule", type="primary")
+
+                if submitted:
+                    if not rule_id or not display_name:
+                        st.error("Rule ID and display name are required.")
+                    else:
+                        import datetime
+                        entry = RuleEntry(
+                            id=rule_id, display_name=display_name, description=description,
+                            when_to_apply=when_to_apply, pg_sql_template=pg_sql_template,
+                            sf_sql_template=sf_sql_template, source_type=source_type,
+                            target_type=target_type, is_learned=True,
+                            learned_at=datetime.date.today().isoformat(),
+                        )
+                        try:
+                            ok = rule_book.save_learned_rule(entry)
+                        except RuleValidationError as exc:
+                            st.error(f"Rejected: {exc}")
+                            ok = None
+                        if ok:
+                            flash(f"Learned rule '{rule_id}' saved — activate it in the Learned Rules tab.", icon="📖")
+                            st.rerun()
+                        elif ok is not None:
+                            st.error("Could not save — a rule with this ID may already exist.")
 
 # =============================================================================
 # TAB: Exclusions
@@ -1853,18 +2899,72 @@ st.markdown("""
     border: none !important; font-size: 0.85rem !important; line-height: 1 !important;
 }
 .gemini-chat-header {
-    background: linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%);
+    background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
     color: white; padding: 14px 18px; border-radius: 16px 16px 0 0;
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(79,70,229,.3);
 }
 .gemini-chat-header .gemini-logo {
-    width: 30px; height: 30px; border-radius: 50%;
-    background: rgba(255,255,255,0.2); display: flex; align-items: center;
-    justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    display: flex; align-items: center;
+    justify-content: center; font-size: 1.15rem; flex-shrink: 0;
 }
-.gemini-chat-header .gemini-title { font-weight: 700; font-size: 1.05rem; }
-.gemini-chat-header .gemini-subtitle { font-size: 0.78rem; opacity: 0.9; }
-.gemini-chat-body { padding: 14px 18px; }
+.gemini-chat-header .gemini-title { font-weight: 800; font-size: 1rem; letter-spacing: -.01em; }
+.gemini-chat-header .gemini-subtitle { font-size: 0.73rem; opacity: 0.85; margin-top: 1px; }
+.gemini-online-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #34D399; box-shadow: 0 0 0 2px rgba(52,211,153,.35);
+    flex-shrink: 0; margin-left: auto;
+}
+.gemini-chat-body { padding: 12px 16px; }
+.gemini-status-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 0 10px; flex-wrap: wrap;
+}
+.gemini-status-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 999px; padding: 4px 10px;
+    font-size: 0.73rem; font-weight: 600; white-space: nowrap;
+}
+.gsb-success { background:#ECFDF5; color:#065F46; border:1px solid #6EE7B7; }
+.gsb-warning { background:#FFFBEB; color:#92400E; border:1px solid #FDE68A; }
+.gsb-info    { background:#EEF2FF; color:#3730A3; border:1px solid #A5B4FC; }
+.gsb-neutral { background:#F1F5F9; color:#475569; border:1px solid #CBD5E1; }
+/* Chat message bubble overrides */
+[data-testid="stChatMessage"] {
+    padding: 6px 0 !important;
+    gap: 8px !important;
+    background: transparent !important;
+}
+[data-testid="stChatMessageContent"] > div > p {
+    margin-bottom: 4px !important;
+    font-size: 0.875rem !important;
+    line-height: 1.55 !important;
+}
+[data-testid="stChatMessage"][data-role="user"] [data-testid="stChatMessageContent"] {
+    background: linear-gradient(135deg,#4F46E5,#7C3AED) !important;
+    color: white !important; border-radius: 16px 16px 4px 16px !important;
+    padding: 10px 14px !important; box-shadow: 0 2px 8px rgba(79,70,229,.28) !important;
+}
+[data-testid="stChatMessage"][data-role="user"] [data-testid="stChatMessageContent"] p { color: white !important; }
+[data-testid="stChatMessage"][data-role="assistant"] [data-testid="stChatMessageContent"] {
+    background: white !important; border: 1px solid #E2E8F0 !important;
+    border-radius: 16px 16px 16px 4px !important;
+    padding: 10px 14px !important; box-shadow: 0 1px 4px rgba(0,0,0,.07) !important;
+}
+/* Quick-action chip buttons */
+.st-key-gemini_chat_panel .stButton button[kind="secondary"] {
+    border-radius: 999px !important; font-size: 0.76rem !important;
+    padding: 5px 12px !important; font-weight: 600 !important;
+    background: #EEF2FF !important; color: #4338CA !important;
+    border: 1.5px solid #A5B4FC !important;
+    transition: background .15s, box-shadow .15s !important;
+}
+.st-key-gemini_chat_panel .stButton button[kind="secondary"]:hover {
+    background: #E0E7FF !important; box-shadow: 0 2px 8px rgba(79,70,229,.2) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1908,21 +3008,7 @@ else:
             st.rerun()
 
 with st.container(key="gemini_chat_panel"):
-    st.markdown(
-        '<div class="gemini-chat-header">'
-        '<div class="gemini-logo">✨</div>'
-        '<div><div class="gemini-title">Gemini Migration Intelligence</div>'
-        '<div class="gemini-subtitle">AI assistant · 24 tools · human-approved actions</div></div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown('<div class="gemini-chat-body">', unsafe_allow_html=True)
-    st.caption(
-        "Gemini orchestrates the 24 Migration Validator tools — it never invents data. "
-        "Every write action is audited and requires a human reviewer with the appropriate RBAC role."
-    )
-
-    # ── Connector + model status ───────────────────────────────────────────
+    # ── Header ─────────────────────────────────────────────────────────────
     sys.path.insert(0, str(_SRC_DIR))
     from gemini_connector.gemini_agent import is_gemini_configured, _vertexai_configured
 
@@ -1931,32 +3017,45 @@ with st.container(key="gemini_chat_panel"):
     _auth_mode    = os.getenv("AUTH_MODE", "static").upper()
     _connector_ok = bool(os.getenv("CONNECTOR_API_TOKEN") or _auth_mode == "DEV")
 
-    # Determine active backend (mirrors create_agent() priority)
     if _dial_key:
         _ai_backend = "DIAL · " + os.getenv("DIAL_MODEL", "gpt-4o")
-        _ai_icon, _ai_status = "✅", "success"
+        _ai_status  = "success"
     elif _gemini_key:
-        _mode_label = "Vertex AI" if _vertexai_configured() else "Developer API"
+        _mode_label = "Vertex AI" if _vertexai_configured() else "Dev API"
         _ai_backend = f"Gemini ({_mode_label}) · " + os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-        _ai_icon, _ai_status = "🤖", "success"
+        _ai_status  = "success"
     else:
-        _ai_backend = "Offline mode"
-        _ai_icon, _ai_status = "⚠️", "warning"
+        _ai_backend = "Offline"
+        _ai_status  = "warning"
 
-    _s1, _s2, _s3 = st.columns(3)
-    with _s1:
-        if _ai_status == "success":
-            st.success(f"**AI Backend** · {_ai_backend}", icon=_ai_icon)
-        else:
-            st.warning(f"**AI Backend** · {_ai_backend}", icon=_ai_icon)
-    with _s2:
-        _auth_icon = "🔐" if _auth_mode == "JWT" else ("🔑" if _auth_mode == "STATIC" else "🧪")
-        st.info(f"**Auth mode** · {_auth_mode}", icon=_auth_icon)
-    with _s3:
-        if _connector_ok:
-            st.success("**Connector** · ready", icon="✅")
-        else:
-            st.warning("**Connector** · token not set", icon="⚠️")
+    st.markdown(
+        '<div class="gemini-chat-header">'
+        '<div class="gemini-logo">✨</div>'
+        '<div>'
+        '<div class="gemini-title">Migration Intelligence</div>'
+        '<div class="gemini-subtitle">AI assistant · 24 governed tools · human-approved writes</div>'
+        '</div>'
+        '<div class="gemini-online-dot" title="Ready"></div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="gemini-chat-body">', unsafe_allow_html=True)
+
+    # ── Compact status bar ─────────────────────────────────────────────────
+    _ai_cls   = "gsb-success" if _ai_status == "success" else "gsb-warning"
+    _ai_dot   = "🟢" if _ai_status == "success" else "🟡"
+    _conn_cls = "gsb-success" if _connector_ok else "gsb-warning"
+    _conn_lbl = "Connector ready" if _connector_ok else "Connector: token not set"
+    _auth_cls = "gsb-info" if _auth_mode == "JWT" else "gsb-neutral"
+    _auth_ico = "🔐" if _auth_mode == "JWT" else ("🔑" if _auth_mode == "STATIC" else "🧪")
+    st.markdown(
+        f'<div class="gemini-status-bar">'
+        f'<span class="gemini-status-badge {_ai_cls}">{_ai_dot} {_ai_backend}</span>'
+        f'<span class="gemini-status-badge {_conn_cls}">{"✅" if _connector_ok else "⚠️"} {_conn_lbl}</span>'
+        f'<span class="gemini-status-badge {_auth_cls}">{_auth_ico} {_auth_mode}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # ── Enterprise identity panel ──────────────────────────────────────────
     with st.expander("🪪 Session Identity & Permissions", expanded=not st.session_state.get("gemini_actor")):
@@ -2059,28 +3158,24 @@ with st.container(key="gemini_chat_panel"):
                     st.error(err_msg)
                     st.session_state["gemini_messages"].append({"role": "assistant", "content": err_msg})
 
-    # ── Quick-action expander sits just above the chat input ───────────────
+    # ── Quick-action chips ─────────────────────────────────────────────────
     _quick_actions = [
-        ("📋 Migration summary",    "Show me a summary of all migrations and which tables need attention."),
-        ("🔍 Pending reviews",      "Show me all column mappings that need my approval."),
-        ("📊 Business metrics",     "Show me the automation metrics and ROI for the Migration Intelligence Connector."),
-        ("🔌 Discover connections", "What database connections are configured?"),
-        ("📉 Coverage below 95%",   "Show me all tables in the bronze layer with validation coverage below 95%."),
-        ("🔎 Coverage below 100%",  "Show me all tables across all sources where coverage is below 100%."),
+        ("📋 Health",          "Give me a quick scorecard — how many tables are passing, failing, and need attention?"),
+        ("🔍 Approvals",       "What column mappings need my sign-off? Show confidence scores and flag anything below 75%."),
+        ("📊 ROI",             "Show me the automation rate, SQL scripts avoided, and failures caught so far."),
+        ("🔌 Connections",     "What source databases are connected and which Snowflake target are they pointing to?"),
+        ("📉 Coverage gaps",   "Which tables have validation coverage below 95%? Rank worst first."),
+        ("⚡ Run & explain",   "Validate the migration_test table and explain any failures you find."),
     ]
-    with st.expander("⚡ Quick actions", expanded=False):
-        qa_row1 = st.columns(3)
-        for col, (label, prompt) in zip(qa_row1, _quick_actions[:3]):
-            if col.button(label, key=f"qa_{label}", use_container_width=True):
-                st.session_state["gemini_pending_prompt"] = prompt
-                st.rerun()
-        qa_row2 = st.columns(3)
-        for col, (label, prompt) in zip(qa_row2, _quick_actions[3:]):
-            if col.button(label, key=f"qa_{label}", use_container_width=True):
-                st.session_state["gemini_pending_prompt"] = prompt
-                st.rerun()
-        st.divider()
-        if st.button("🗑️ Clear chat history", key="gemini_clear", help="Reset conversation and agent"):
+    st.markdown("<div style='font-size:0.72rem;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;'>Quick actions</div>", unsafe_allow_html=True)
+    _qa_cols = st.columns(len(_quick_actions))
+    for col, (label, prompt) in zip(_qa_cols, _quick_actions):
+        if col.button(label, key=f"qa_{label}"):
+            st.session_state["gemini_pending_prompt"] = prompt
+            st.rerun()
+    _cl1, _cl2 = st.columns([6, 1])
+    with _cl2:
+        if st.button("🗑️", key="gemini_clear", help="Clear conversation"):
             st.session_state["gemini_messages"] = []
             st.session_state.pop("gemini_agent_instance", None)
             st.rerun()
@@ -2090,7 +3185,7 @@ with st.container(key="gemini_chat_panel"):
     # fixed-position floating panel. A form stays inside the panel's bounds.
     with st.form("gemini_chat_form", clear_on_submit=True, border=False):
         _fc1, _fc2 = st.columns([5, 1])
-        user_input = _fc1.text_input("Ask about your migration…", key="gemini_input", label_visibility="collapsed")
+        user_input = _fc1.text_input("Ask anything — 'validate X', 'why did Y fail?', 'approve all high-confidence'…", key="gemini_input", label_visibility="collapsed")
         sent = _fc2.form_submit_button("➤")
     if sent and user_input:
         st.session_state["gemini_messages"].append({"role": "user", "content": user_input})
@@ -2636,330 +3731,251 @@ with tab_review:
 # TAB: Guide
 # =============================================================================
 with tab_guide:
-    st.subheader("Guide — how to use Migration Validator")
-    st.caption(
-        "A plain-language walkthrough of every tab. If something in the app is unclear, it should be "
-        "explained here — if it isn't, treat that as a gap in this guide, not something you need to "
-        "already know."
-    )
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:14px;padding:8px 0 16px;">
+        <div style="width:44px;height:44px;border-radius:10px;
+                    background:linear-gradient(135deg,#4F46E5,#818CF8);
+                    display:flex;align-items:center;justify-content:center;font-size:1.3rem;">📘</div>
+        <div>
+            <div style="font-size:1.2rem;font-weight:800;color:#0F172A;">Documentation &amp; Guide</div>
+            <div style="font-size:0.8rem;color:#64748B;">Everything you need to know — from quickstart to RBAC details</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("### 1. What this app does")
-    st.markdown(
-        "Migration Validator compares a source table (PostgreSQL / MSSQL / Athena) against its migrated "
-        "Snowflake table, column by column, and generates two kinds of output for every table you run:\n\n"
-        "- **SQL files** — one query per side (source + Snowflake) that pull back the values to compare.\n"
-        "- **A validation YAML** — the config that ties the two SQL queries together, records which "
-        "columns were skipped and why, and is what a downstream validation run actually reads.\n\n"
-        "There are two ways to generate this output — pick whichever matches how many tables you're doing "
-        "right now:"
-    )
-    st.markdown(
-        "- **▶️ Generate Single YAML** — one source table → one Snowflake table. Best when you're setting "
-        "up a new table, debugging a mismatch, or want to carefully check one mapping before trusting it.\n"
-        "- **📋 Generate Batch YAML** — many source tables in one pass. Best once you've already validated "
-        "the pattern works (e.g. via Single YAML) and just need to repeat it across a schema."
-    )
+    # ── Quick nav sub-tabs ────────────────────────────────────────────────────
+    _g1, _g2, _g3, _g4 = st.tabs(["🚀 Quickstart", "⚙️ Features", "🔐 Security & RBAC", "📜 Audit & Compliance"])
 
-    st.divider()
-    st.markdown("### 2. Generate Single YAML — step by step")
-    st.markdown(
-        "1. **① Source** — pick the connection, database, schema, and table you're validating.\n"
-        "2. **② Target (Snowflake)** — pick the database, schema, and table it was migrated to.\n"
-        "3. **③ Columns to exclude** — see section 4 below, this decides which columns are skipped.\n"
-        "4. **④ Column mapping** — click **🔍 Preview column mapping** to see how the AI/fuzzy matcher "
-        "paired up every source column with a target column. Fix anything it got wrong directly in the "
-        "grid — this is your chance to catch a bad rename match before it's baked into the YAML.\n"
-        "5. *(Optional)* **🧪 Generate custom SQL from a prompt** — see section 5 below.\n"
-        "6. Click **▶️ Generate SQL + YAML**. The output file paths are shown once it finishes — that's "
-        "where the SQL and YAML were written, based on the medallion layer you picked."
-    )
+    with _g1:
+        # Workflow diagram
+        st.markdown("""
+        <div style="background:white;border:1px solid #E2E8F0;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+            <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94A3B8;margin-bottom:12px;">END-TO-END WORKFLOW</div>
+            <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;">
+                <div style="background:#EEF2FF;border:1.5px solid #A5B4FC;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#4338CA;">1 · Connect</div>
+                <div style="color:#A5B4FC;font-size:1.2rem;padding:0 6px;">→</div>
+                <div style="background:#EEF2FF;border:1.5px solid #A5B4FC;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#4338CA;">2 · Exclusions</div>
+                <div style="color:#A5B4FC;font-size:1.2rem;padding:0 6px;">→</div>
+                <div style="background:#EEF2FF;border:1.5px solid #A5B4FC;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#4338CA;">3 · Generate YAML</div>
+                <div style="color:#A5B4FC;font-size:1.2rem;padding:0 6px;">→</div>
+                <div style="background:#EEF2FF;border:1.5px solid #A5B4FC;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#4338CA;">4 · Review &amp; Approve</div>
+                <div style="color:#A5B4FC;font-size:1.2rem;padding:0 6px;">→</div>
+                <div style="background:#EEF2FF;border:1.5px solid #A5B4FC;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#4338CA;">5 · Run Validation</div>
+                <div style="color:#A5B4FC;font-size:1.2rem;padding:0 6px;">→</div>
+                <div style="background:#ECFDF5;border:1.5px solid #6EE7B7;border-radius:999px;padding:7px 18px;font-size:0.8rem;font-weight:700;color:#065F46;">✅ Results</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 3. Generate Batch YAML — step by step")
-    st.markdown(
-        "1. **① Source** — pick the connection/database/schema, then select every source table you want "
-        "to validate in this run.\n"
-        "2. **② Target (Snowflake)** — pick just the database and schema (there's no single Snowflake "
-        "table picker here — you map each table individually in the next step).\n"
-        "3. **③ Mapping grid** — the app auto-suggests a Snowflake target per source table (exact name "
-        "match, or the closest fuzzy match). Rows marked **⚠️ Ambiguous** or **⚠️ No close match found** "
-        "are left blank on purpose — pick the correct target yourself rather than trust a guess. You "
-        "cannot generate until every row has a distinct target.\n"
-        "4. **④ Columns to exclude (per table)** — see section 4 below.\n"
-        "5. **⑤ Column mapping** — same idea as Single YAML, but one review grid per table (in a "
-        "collapsed expander so the page stays manageable with many tables).\n"
-        "6. Click **▶️ Generate All** — it processes every table in sequence and shows a success/failure "
-        "row for each one at the end."
-    )
+        # Step cards
+        _steps = [
+            ("Configure connections", ".env holds your source DB and Snowflake credentials. No credentials are entered inside the app itself — it reads from the environment, keeping secrets out of session state."),
+            ("Set exclusion policy", "Open the Exclusions tab and add any columns your team always wants skipped (Fivetran metadata, internal audit columns). These apply globally per source type."),
+            ("Generate Single YAML", "Pick source table → Snowflake table. Preview the column mapping, fix any wrong suggestions in the grid, then click Generate. The YAML and SQL files are written to the chosen medallion layer folder."),
+            ("Batch-generate for a schema", "Once you're confident one table works, switch to Batch YAML. Select many tables at once, map each to its Snowflake target, and generate in one pass."),
+            ("Review & Approve", "Any mapping the AI is less than 95% confident about goes to PENDING. A human reviewer must approve, reject, or modify it before it can be used."),
+            ("Run Validation", "Execute the Run Validation tab. It calls Project/main.py against the generated YAMLs and shows PASS/FAIL per table with a row-level diff view for failures."),
+        ]
+        _sc1, _sc2 = st.columns(2)
+        for i, (title, body) in enumerate(_steps):
+            col = _sc1 if i % 2 == 0 else _sc2
+            col.markdown(f"""
+            <div class="step-card" style="margin-bottom:22px;margin-top:18px;">
+                <div class="step-num">{i+1}</div>
+                <div class="step-title">{title}</div>
+                <div class="step-body">{body}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 4. Columns to exclude — the 3 categories, explained")
-    st.markdown(
-        "Every \"Columns to exclude\" section (in both Single YAML and Batch YAML) always shows the "
-        "**same table columns split into 3 groups**, so it's never a mystery which columns are being "
-        "skipped and why:"
-    )
-    st.markdown(
-        "1. **🔒 Built-in auto-excluded** — hardcoded in the app's code (Fivetran sync/CDC metadata "
-        "columns like `_fivetran_synced`, `_fivetran_id`, etc.). Always applied to every table, for every "
-        "source type. You cannot remove these from the app — they are not real business columns.\n"
-        "2. **🌐 User-defined global exclusions** — columns your team has explicitly added as \"always "
-        "skip this, for every table of this source type\" — managed entirely from the **Exclusions** tab "
-        "(add there with the form; remove with the 🗑️ Remove button next to each one). Example: your team "
-        "decided `uts`/`uuid` should never be compared for PostgreSQL sources.\n"
-        "3. **➕ Additional columns to exclude (optional, just for this run)** — the picker box you "
-        "interact with directly on the Single YAML / Batch YAML screen. Use this for a one-off skip that "
-        "only applies to *this* table, *this* generation run — e.g. a column you know is broken in this "
-        "one legacy table. Click into the box to add a column; click the ✕ on a chip to remove it."
-    )
-    st.markdown(
-        "**Why 3 groups instead of one combined list?** Groups 1 and 2 are always applied no matter what "
-        "— they're shown as plain, read-only text so you know *why* a column disappeared from the mapping "
-        "grid without having to guess. Only group 3 is something you actively choose on this screen. "
-        "Before this change, all three were merged into one pre-checked pick-list, which made it easy to "
-        "mistake a permanent, team-wide exclusion for something you personally selected (or vice versa)."
-    )
-    st.info(
-        "**Fixed bug:** Single YAML previously failed to reliably apply groups 1 and 2 at all — a Streamlit "
-        "widget-state issue meant the auto-excluded columns looked pre-checked but weren't actually excluded "
-        "from the generated YAML. This is fixed: groups 1 and 2 are now applied unconditionally, independent "
-        "of anything in the picker.",
-        icon="🛠️",
-    )
+        # What it does box
+        st.markdown("""
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:16px 20px;margin-top:8px;">
+        <div style="font-weight:700;color:#166534;margin-bottom:8px;">What Migration Validator produces for every table</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:0.83rem;color:#14532D;">
+            <div>📄 <b>Source SQL</b> — normalised SELECT query for the source DB (PostgreSQL / MSSQL / Athena)</div>
+            <div>🏔️ <b>Snowflake SQL</b> — matching normalised SELECT for the Snowflake target</div>
+            <div>📋 <b>Validation YAML</b> — config that ties both queries together with metadata</div>
+            <div>📊 <b>Row-level CSV</b> — PASS/FAIL status per row with source vs. target values side-by-side</div>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 5. Generate custom SQL from a prompt")
-    st.markdown(
-        "After you preview a table's column mapping (Single YAML or Batch YAML), an optional "
-        "**\"🧪 Generate custom SQL from a prompt\"** section appears below the mapping grid. Use it when "
-        "the standard column-by-column comparison isn't what you need — for example:\n\n"
-        "- *\"Count rows where status = 'active', grouped by region\"* (an aggregate check, not a "
-        "row-by-row diff)\n"
-        "- *\"Compare only the amount and currency columns for orders placed in the last 30 days\"* "
-        "(a filtered subset check)\n"
-        "- *\"Row count only, no column comparison\"* (a lightweight sanity check before running the full "
-        "validation)"
-    )
-    st.markdown(
-        "How to use it:\n"
-        "1. Expand the section and pick which mapped columns should be included in the query.\n"
-        "2. Choose the target side: source only, Snowflake only, or both (so you get a matching pair of "
-        "queries to diff against each other).\n"
-        "3. Type your request in plain English in the prompt box.\n"
-        "4. Pick an AI model and click generate. **Always read the generated SQL before trusting it** — "
-        "it's a starting point, not a guarantee.\n"
-        "5. Save it — it's written to the same output folder as the table's regular SQL/YAML files."
-    )
+    with _g2:
+        # Column exclusions
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 12px;">Column exclusion — 3 categories</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+            <div style="background:white;border:1px solid #E2E8F0;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+                <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748B;margin-bottom:6px;">🔒 Built-in</div>
+                <div style="font-size:0.83rem;color:#334155;">Fivetran metadata columns hardcoded in the app. Always excluded — no UI to change them.</div>
+            </div>
+            <div style="background:white;border:1px solid #E2E8F0;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+                <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748B;margin-bottom:6px;">🌐 Global user exclusions</div>
+                <div style="font-size:0.83rem;color:#334155;">Managed in the <b>Exclusions</b> tab. Apply to every table of that source type.</div>
+            </div>
+            <div style="background:white;border:1px solid #E2E8F0;border-radius:10px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">
+                <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748B;margin-bottom:6px;">➕ Run-specific</div>
+                <div style="font-size:0.83rem;color:#334155;">The picker on Single/Batch YAML. One-off skip for this generation only — not saved anywhere.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 6. Rule Book — Base / Draft / Active rules")
-    st.markdown(
-        "The Rule Book decides *how* a source column type gets compared to its Snowflake counterpart "
-        "(e.g. does a `TIMESTAMP` get compared to microsecond precision? is a `UUID` comparison case-"
-        "sensitive?). Every rule is in exactly one of three states:"
-    )
-    st.markdown(
-        "- **Base rule** — written directly into the code (`src/rules/postgres_base_rules.py`). Always "
-        "checked first for a given type pair. Nothing below can ever override, hide, or shadow a base "
-        "rule — it's the source of truth.\n"
-        "- **Draft rule** — a rule someone (or the AI paste tool) proposed, saved to "
-        "`src/rule_book_learned.json`, but not yet reviewed. **A draft never affects real SQL generation "
-        "— it's advisory only**, shown here and fed to the AI as extra context, but silently ignored by "
-        "the actual query-generation logic. This is the safe default: nothing changes just by proposing "
-        "a rule.\n"
-        "- **Active rule** — a draft that a person reviewed and clicked **Activate** on. From that point "
-        "it *is* used — but strictly as a **gap filler**: only for a type pair that has no base rule at "
-        "all. It can never compete with or replace a base rule."
-    )
-    st.markdown(
-        "**Two ways to add a draft rule:**\n"
-        "1. **Paste a type-mapping table (AI-assisted)** — paste any text describing type mappings (e.g. "
-        "`nvarchar -> TEXT`), and the AI proposes rules. It can only ever *reuse* an existing base rule's "
-        "already-tested SQL behavior — it cannot invent brand-new SQL. Review the proposed rows, check "
-        "the ones you want, and save — they land as drafts.\n"
-        "2. **Add manually** — fill in the form with your own SQL templates. Also starts as a draft.\n\n"
-        "Either way, nothing is live until you find it in the **Learned rules** list and click **Activate**."
-    )
+        # Rule book
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 12px;">Rule Book — how types are normalised</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+            <div style="background:#ECFDF5;border:1px solid #86EFAC;border-radius:10px;padding:14px;">
+                <div style="font-weight:700;color:#065F46;margin-bottom:5px;">🔒 Base rules</div>
+                <div style="font-size:0.82rem;color:#166534;">In <code>postgres_base_rules.py</code>. Always run first. Cannot be overridden.</div>
+            </div>
+            <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:10px;padding:14px;">
+                <div style="font-weight:700;color:#3730A3;margin-bottom:5px;">📝 Draft rules</div>
+                <div style="font-size:0.82rem;color:#4338CA;">Saved to <code>rule_book_learned.json</code>. Advisory only — never generate real SQL until activated.</div>
+            </div>
+            <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:14px;">
+                <div style="font-weight:700;color:#92400E;margin-bottom:5px;">⚡ Active rules</div>
+                <div style="font-size:0.82rem;color:#78350F;">Gap fillers — only for type pairs with no base rule. Activate a draft in the Rule Book tab.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 7. Exclusions tab — managing the global lists")
-    st.markdown(
-        "This tab is where the **🌐 user-defined global exclusions** (category 2 in section 4) are "
-        "managed — one list per source type (PostgreSQL / MSSQL / Athena), since a column excluded here "
-        "applies to every table of that source type going forward.\n\n"
-        "- **Add** — enter one or more comma-separated column names, a reason, and which source type(s) "
-        "it applies to, then **Save exclusion**.\n"
-        "- **Remove** — expand a source type, find the column under **User-saved global exclusions**, "
-        "and click **🗑️ Remove** next to it.\n\n"
-        "The **🔒 built-in auto-excluded** list (Fivetran metadata columns) is shown here too, for "
-        "reference — but it's code-defined and can't be edited from the app."
-    )
+        # Custom SQL
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 8px;">Custom SQL from a prompt</div>
+        <div style="font-size:0.85rem;color:#475569;line-height:1.65;">
+        After previewing a column mapping in Single or Batch YAML, a <b>🧪 Generate custom SQL from a prompt</b>
+        section appears. Use it when you need something the standard column-diff doesn't cover:
+        <ul style="margin:8px 0 0 16px;">
+            <li>Aggregate checks — <em>"Count rows where status = 'active', grouped by region"</em></li>
+            <li>Filtered subsets — <em>"Compare only orders in the last 30 days"</em></li>
+            <li>Lightweight sanity checks — <em>"Row count only, no column comparison"</em></li>
+        </ul>
+        Always review the generated SQL before trusting it — it's a starting point, not a guarantee.
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 8. Typical workflow, end to end")
-    st.markdown(
-        "1. **Connections** — confirm your source and Snowflake connections are configured (read from "
-        "`.env`, nothing to set up in the app itself).\n"
-        "2. **Exclusions** — check the global exclusion list for your source type; add anything your team "
-        "always wants skipped before you start generating.\n"
-        "3. **Generate Single YAML** (for one table, or your first time validating a new pattern) or "
-        "**Generate Batch YAML** (once you're confident and have several tables to push through) — pick "
-        "table(s), review the column mapping, adjust any run-specific exclusions, optionally add a custom "
-        "SQL query, then generate.\n"
-        "4. **Rule Book** — if the AI flags a type pair it's unsure about during mapping, come here to "
-        "add/paste a rule (starts as a draft), review it carefully, then activate it so future runs use "
-        "it automatically.\n"
-        "5. **Usage & Cost** — check AI token usage and estimated cost for the session, especially before "
-        "a large batch run."
-    )
+        # AI chat
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 8px;">AI Migration Intelligence Chat</div>
+        <div style="font-size:0.85rem;color:#475569;line-height:1.65;">
+        The <b>✨ chat bubble</b> (bottom-right) gives you a governed tool loop — not a free chatbot:
+        <ol style="margin:8px 0 0 16px;">
+            <li>You type a natural-language request.</li>
+            <li>The AI selects from <b>24 registered tools</b> and calls them in sequence (up to 10 rounds).</li>
+            <li>Every tool returns live data — no fabrication.</li>
+            <li>Results are synthesised into a plain-English response.</li>
+            <li>Every tool call is visible in the <b>🔧 Tools used</b> expander below each reply.</li>
+        </ol>
+        <b>Quick actions</b> send pre-built prompts so you don't have to type.
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 9. Gemini Migration Intelligence — how the AI chat works")
-    st.markdown(
-        "The **🤖 Gemini Chat** tab gives you a conversational interface to the entire Migration Validator "
-        "platform. It is not a free-form chatbot — Gemini operates strictly within a governed tool loop:"
-    )
-    st.markdown(
-        "1. You send a natural-language request (e.g. *\"Show me all tables in bronze with coverage below 95%\"*).\n"
-        "2. Gemini selects one or more of the **24 registered tools** and calls them in sequence (up to 10 rounds).\n"
-        "3. Each tool returns real, live data from your source/Snowflake connections or the plan store — "
-        "Gemini never fabricates values.\n"
-        "4. Gemini synthesises the tool results into a plain-English response.\n"
-        "5. Every tool call and its result is visible in the **🔧 Tools used** expander beneath the response."
-    )
-    st.markdown(
-        "**What Gemini can do via the chat:**\n"
-        "- Discover connected databases and list available tables\n"
-        "- Generate, inspect, and compare validation plans\n"
-        "- Surface column mappings that need human review (confidence < 95%)\n"
-        "- Show business metrics: automation rate, SQL queries avoided, ROI\n"
-        "- Initiate governed approval workflows (writes are audited and role-gated)\n\n"
-        "**What Gemini cannot do:**\n"
-        "- Invent column names, row counts, or validation results\n"
-        "- Approve its own suggestions — a human with the REVIEWER role must sign off\n"
-        "- Bypass authentication or ignore RBAC restrictions"
-    )
-    st.info(
-        "**Quick actions** below the status bar send pre-built prompts so you don't have to type. "
-        "Each button maps to a specific tool combination — click one, watch the tool calls unfold in the expander.",
-        icon="ℹ️",
-    )
+    with _g3:
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 12px;">Authentication modes</div>
+        """, unsafe_allow_html=True)
+        import pandas as _pd_guide
+        _auth_table = {
+            "Mode": ["`jwt`", "`static`", "`dev`"],
+            "When to use": ["Production / staging", "CI pipelines, demos", "Local development only"],
+            "How it works": [
+                "Validates a signed JWT (HS256 or RS256). Roles extracted from token claims. Expiry, issuer, and audience enforced.",
+                "Pre-shared bearer token (CONNECTOR_API_TOKEN). Roles via CONNECTOR_ROLES env var.",
+                "No validation. Every request accepted with ADMIN role. Never use outside localhost.",
+            ],
+            "Env vars": [
+                "JWT_SECRET or JWT_PUBLIC_KEY; optionally JWT_ISSUER, JWT_AUDIENCE",
+                "CONNECTOR_API_TOKEN; optionally CONNECTOR_ROLES",
+                "None",
+            ],
+        }
+        st.dataframe(_pd_guide.DataFrame(_auth_table), hide_index=True, use_container_width=True)
 
-    st.divider()
-    st.markdown("### 10. Authentication — three modes explained")
-    st.markdown(
-        "The Migration Intelligence Connector (the FastAPI server that backs the Gemini tools) enforces "
-        "bearer-token authentication on every request. The mode is controlled by the `AUTH_MODE` env var:"
-    )
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 12px;">Role-Based Access Control (RBAC)</div>
+        <div style="font-size:0.83rem;color:#475569;margin-bottom:12px;">Roles are cumulative — each level includes all permissions of the level below it.</div>
+        """, unsafe_allow_html=True)
+        _rbac_rows = [
+            ("VIEWER",               "#F1F5F9", "#334155", "Read schemas, mappings, rules, validation results"),
+            ("REVIEWER",             "#EEF2FF", "#3730A3", "VIEWER + approve / reject / modify column mappings"),
+            ("RULE_ADMIN",           "#FEF3C7", "#92400E", "REVIEWER + create, update, approve and activate transformation rules"),
+            ("VALIDATION_OPERATOR",  "#ECFDF5", "#065F46", "REVIEWER + trigger validation runs, generate and execute SQL"),
+            ("ADMIN",                "#FFF1F2", "#9F1239", "All permissions across all resources"),
+        ]
+        for role, bg, fg, desc in _rbac_rows:
+            st.markdown(f"""
+            <div style="background:{bg};border-radius:8px;padding:10px 16px;margin-bottom:6px;display:flex;align-items:center;gap:14px;">
+                <div style="font-size:0.75rem;font-weight:800;color:{fg};font-family:monospace;min-width:140px;">{role}</div>
+                <div style="font-size:0.82rem;color:#334155;">{desc}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    _auth_table = {
-        "Mode": ["`jwt`", "`static`", "`dev`"],
-        "When to use": ["Production / staging", "CI pipelines, hackathon demos", "Local development only"],
-        "How it works": [
-            "Validates a signed JWT (HS256 or RS256). Roles and permissions are extracted from the token claims (`roles`, `permissions`). Expiry, issuer, and audience are all enforced.",
-            "Pre-shared bearer token (`CONNECTOR_API_TOKEN`). Roles configured via `CONNECTOR_ROLES` env var. Simple but no expiry — rotate regularly.",
-            "No validation. Every request is accepted with ADMIN role. Never use outside localhost.",
-        ],
-        "Env vars required": [
-            "`JWT_SECRET` (HS256) or `JWT_PUBLIC_KEY` (RS256). Optionally `JWT_ISSUER`, `JWT_AUDIENCE`.",
-            "`CONNECTOR_API_TOKEN`, optionally `CONNECTOR_ROLES`.",
-            "None.",
-        ],
-    }
-    import pandas as pd
-    st.dataframe(pd.DataFrame(_auth_table), hide_index=True, use_container_width=True)
+        st.warning(
+            "**Security invariant:** The string `gemini_ai` is always rejected as an actor on write tools. "
+            "Gemini can never self-approve — a human with the correct role must confirm.",
+            icon="🛡️",
+        )
 
-    st.markdown(
-        "**Bearer token format** — all requests to the connector must include:\n"
-        "```\nAuthorization: Bearer <your-token>\n```\n"
-        "A missing or invalid token returns HTTP 401. An expired JWT returns `TOKEN_EXPIRED`."
-    )
+    with _g4:
+        # Confidence tiers
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 8px;">Confidence tiers &amp; approval gates</div>
+        """, unsafe_allow_html=True)
+        _conf_tiers = [
+            ("≥ 95%", "Auto-accepted", "#ECFDF5", "#065F46", "Proceeds to plan immediately — no human action required"),
+            ("75–95%", "Pending review", "#FEF3C7", "#92400E", "Reviewer must approve or reject before mapping is used"),
+            ("< 75%", "Mandatory review", "#FFF1F2", "#9F1239", "Reviewer must approve, reject, or modify — cannot skip"),
+        ]
+        for conf, state, bg, fg, desc in _conf_tiers:
+            st.markdown(f"""
+            <div style="background:{bg};border-radius:8px;padding:12px 16px;margin-bottom:8px;
+                        display:flex;align-items:center;gap:16px;">
+                <div style="font-size:1rem;font-weight:800;color:{fg};min-width:60px;text-align:center;">{conf}</div>
+                <div>
+                    <div style="font-weight:700;color:{fg};font-size:0.85rem;">{state}</div>
+                    <div style="font-size:0.8rem;color:#334155;">{desc}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    st.divider()
-    st.markdown("### 11. Role-Based Access Control (RBAC)")
-    st.markdown(
-        "Every write-back and approval action is gated by a five-level RBAC hierarchy. "
-        "Roles are cumulative — each level includes all permissions of the level below it."
-    )
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 8px;">Audit trail</div>
+        <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:16px 20px;font-size:0.83rem;color:#334155;">
+        Every write action — approval, rejection, modification, rule activation, plan sign-off — is appended to
+        an <b>immutable append-only JSONL log</b> at <code>output/audit_log.jsonl</code>. Records are never
+        modified or deleted.<br><br>
+        Each record contains: <code>audit_id</code> · <code>action</code> · <code>actor</code> ·
+        <code>timestamp</code> (ISO 8601 UTC) · <code>resource_type</code> / <code>resource_id</code> ·
+        <code>reason</code> · <code>before</code> / <code>after</code> state snapshot.<br><br>
+        <b>Never recorded:</b> passwords, API keys, JWT secrets, or raw bearer tokens.
+        </div>
+        """, unsafe_allow_html=True)
+        st.info(
+            "The audit trail is designed for regulatory and compliance review. It can be exported to a SIEM "
+            "or reviewed by a security team without exposing any credentials.",
+            icon="📋",
+        )
 
-    _rbac_table = {
-        "Role": ["VIEWER", "REVIEWER", "RULE_ADMIN", "VALIDATION_OPERATOR", "ADMIN"],
-        "Permissions": [
-            "Read schemas, mappings, rules, validation results",
-            "VIEWER + approve / reject / modify column mappings, add comments",
-            "REVIEWER + create, update, approve, and activate transformation rules",
-            "REVIEWER + trigger validation runs, generate and execute SQL",
-            "All permissions across all resources",
-        ],
-        "Typical user": [
-            "Data analyst, read-only stakeholder",
-            "Migration engineer, data steward",
-            "Platform / rules owner",
-            "Validation pipeline operator",
-            "Platform administrator",
-        ],
-    }
-    st.dataframe(pd.DataFrame(_rbac_table), hide_index=True, use_container_width=True)
+        st.markdown("---")
+        st.markdown("""
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;margin:4px 0 8px;">Human-in-the-loop guarantee</div>
+        <div style="font-size:0.83rem;color:#475569;line-height:1.65;">
+        Three review decisions are available in the <b>✅ Review &amp; Approve</b> tab:
+        <ul style="margin:8px 0 0 16px;">
+            <li><b>Approve</b> — accepts the AI mapping as-is. Recorded with your identity and timestamp.</li>
+            <li><b>Reject</b> — discards the mapping. It will not be used. Reason is required and recorded.</li>
+            <li><b>Modify</b> — accepts the mapping but substitutes a different target column. Both the
+                original AI suggestion and your override are recorded for auditability.</li>
+        </ul>
+        All decisions use <b>optimistic concurrency control (OCC)</b> — two reviewers cannot simultaneously
+        approve the same mapping, eliminating race conditions.
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown(
-        "Fine-grained permissions (e.g. `mapping.approve`, `rule.activate`, `validation.execute`) are "
-        "derived from the role list automatically. Explicit `permissions` claims in the JWT override "
-        "role-derived defaults, enabling resource-level restrictions (e.g. allow `mapping.approve` "
-        "only for a specific schema)."
-    )
-    st.warning(
-        "**Security invariant:** The string `gemini_ai` is rejected as an actor on all write tools — "
-        "Gemini can never self-approve. A human identity with the correct role must always confirm.",
-        icon="🛡️",
-    )
-
-    st.divider()
-    st.markdown("### 12. Human-in-the-Loop approval workflow")
-    st.markdown(
-        "When the AI's confidence in a column mapping falls below the `CONFIDENCE_AUTO_ACCEPT` threshold "
-        "(default 95%), the mapping enters **PENDING** state and must be reviewed before it can affect "
-        "any generated validation SQL. The **✅ Review & Approve** tab is where this happens."
-    )
-    st.markdown(
-        "**Confidence tiers:**\n"
-        "| Confidence | State | Action required |\n"
-        "|---|---|---|\n"
-        "| ≥ 95% (`CONFIDENCE_AUTO_ACCEPT`) | Auto-accepted | None — proceeds to plan immediately |\n"
-        "| 75–95% (`CONFIDENCE_REVIEW`) | Pending human review | Reviewer must approve or reject |\n"
-        "| < 75% | Mandatory review | Reviewer must approve, reject, or modify |\n"
-    )
-    st.markdown(
-        "**Three review decisions:**\n"
-        "- **Approve** — accepts the AI mapping as-is. Recorded with your identity and timestamp.\n"
-        "- **Reject** — discards the mapping. It will not be used. Reason is required and recorded.\n"
-        "- **Modify** — accepts the mapping but substitutes a different target column you specify. "
-        "Both the original AI suggestion and your override are recorded for auditability."
-    )
-    st.markdown(
-        "All decisions use **optimistic concurrency control** (OCC) — a version token ensures two "
-        "reviewers cannot simultaneously approve the same mapping, eliminating race conditions."
-    )
-
-    st.divider()
-    st.markdown("### 13. Audit trail — what is recorded and where")
-    st.markdown(
-        "Every write action (approval, rejection, modification, rule activation, plan sign-off) is "
-        "appended to an **immutable append-only JSONL audit log** at `output/audit_log.jsonl`. "
-        "Records are never modified or deleted."
-    )
-    st.markdown(
-        "Each audit record contains:\n"
-        "- `audit_id` — globally unique identifier for the record\n"
-        "- `action` — what happened (e.g. `mapping.approve`, `rule.activate`)\n"
-        "- `actor` — your corporate email / user ID\n"
-        "- `timestamp` — ISO 8601 UTC\n"
-        "- `resource_type` / `resource_id` — what was acted on\n"
-        "- `reason` — required for rejections; optional for approvals\n"
-        "- `before` / `after` — state snapshot (for modify actions)\n\n"
-        "**What is never recorded:** passwords, API keys, JWT secrets, or raw bearer tokens."
-    )
-    st.info(
-        "The audit trail is designed for regulatory and compliance use. It can be exported, shipped "
-        "to a SIEM, or reviewed by a security team without exposing any credentials.",
-        icon="📋",
-    )
+    # (old flat-markdown guide replaced by sub-tabs above)

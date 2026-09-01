@@ -57,6 +57,11 @@ _SRC_DIR = Path(__file__).parent
 sys.path.insert(0, str(_SRC_DIR))
 sys.path.insert(0, str(_SRC_DIR.parent))
 
+# Single shared implementation of JSON/JSONB/HStore canonicalization, also used
+# by Project/main.py (the runtime comparison engine). Resolved via the project
+# root added to sys.path just above.
+from Project.utils.semantic_normalize import canonicalize_value  # noqa: E402
+
 # Windows consoles default to cp1252, which cannot encode the box-drawing and
 # arrow characters used throughout this CLI — including inside argparse help,
 # so even `--help` would crash. Force UTF-8 on every stream we write to.
@@ -2523,28 +2528,25 @@ def cmd_add_exclusion(args):
 
 
 def _canonical_validation_value(column_name: str, value):
-    """Normalize equivalent JSON/HStore representations before comparison."""
+    """Normalize equivalent JSON/HStore representations before comparison.
+
+    Delegates to Project/utils/semantic_normalize.py, which is the single
+    implementation shared with Project/main.py — the runtime comparison engine.
+
+    The previous inline version stayed behind it in three ways, all of which
+    produced false mismatches on real data:
+      * it dispatched on the column *name* ("json" in column_name), so a
+        semi-structured column named anything else was skipped entirely;
+      * it did not recurse into values that are themselves serialized JSON
+        documents (the common hstore case), so a re-serialized inner document
+        read as data drift;
+      * its hstore regex — r'"([^"]+)"\\s*=>\\s*"([^"]*)"' — truncated any value
+        containing an escaped quote, e.g.
+        "payables"=>"[{\\"ledger_id\\":6752258}]".
+    """
     if value is None:
         return None
-    text = str(value).strip()
-    lowered_name = column_name.lower()
-    if "json" in lowered_name:
-        try:
-            import json
-            return json.dumps(json.loads(text), sort_keys=True, separators=(",", ":"))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return text
-    if "hstore" in lowered_name:
-        try:
-            import json
-            if text.startswith("{"):
-                return json.dumps(json.loads(text), sort_keys=True, separators=(",", ":"))
-            pairs = re.findall(r'"([^"]+)"\s*=>\s*"([^"]*)"', text)
-            if pairs:
-                return json.dumps(dict(pairs), sort_keys=True, separators=(",", ":"))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            pass
-    return text
+    return canonicalize_value(str(value).strip())
 
 
 def _run_parameterized_tables(args, current_model: str, exclude_cols: list) -> None:
