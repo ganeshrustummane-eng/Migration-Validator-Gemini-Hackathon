@@ -900,12 +900,89 @@ def render_mapping_review(
         key=f"{key_prefix}_mapping_editor",
     )
 
-    unmatched = [r["source_column"] for r in rows if not r["skip_validation"] and not r["target_column"]]
-    low_conf = [r["source_column"] for r in rows if not r["skip_validation"] and r["target_column"] and r["confidence"] < 0.75]
+    # corrected_targets: columns the user has manually fixed in the grid this session
+    corrected_targets = {
+        row["Source Column"]
+        for _, row in edited.iterrows()
+        if row["Corrected Target"] and row["Corrected Target"] != row["AI/Fuzzy Target"]
+    }
+
+    # skipped = skip_validation=True AND no user correction yet
+    skipped_low = [
+        r for r in rows
+        if r.get("skip_validation")
+        and not r.get("target_column")
+        and r["source_column"] not in corrected_targets
+        and r.get("confidence", 0.0) < 0.75
+    ]
+    # matched but low confidence (not corrected, not a learned rule)
+    low_conf_rows = [
+        r for r in rows
+        if not r.get("skip_validation")
+        and r.get("target_column")
+        and r["source_column"] not in corrected_targets
+        and r.get("confidence", 1.0) < 0.75
+    ]
+
+    if skipped_low:
+        _sk_cols = ", ".join(
+            f"`{r['source_column']}` ({int(r.get('confidence',0)*100)}%)" for r in skipped_low
+        )
+        _sk_c1, _sk_c2 = st.columns([3, 1])
+        with _sk_c1:
+            st.warning(
+                f"⚠️ **{len(skipped_low)} column(s) skipped — no target match found** "
+                f"(confidence below 75%): {_sk_cols}\n\n"
+                "Set a **Corrected Target** above to include them, or raise a Jira ticket for manual review."
+            )
+        with _sk_c2:
+            if st.button("🎫 Raise Jira ticket", key=f"{key_prefix}_skip_jira_btn"):
+                try:
+                    from gemini_connector.jira_client import create_ticket, is_configured
+                    if not is_configured():
+                        st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in `.env`.")
+                    else:
+                        _t = create_ticket(
+                            summary=f"[Migration Validator] Skipped columns need mapping: {pg_table}",
+                            description=(
+                                f"Table: {pg_table}\n\nColumns skipped (no target match, confidence <75%):\n"
+                                + "\n".join(
+                                    f"  - {r['source_column']} (conf {int(r.get('confidence',0)*100)}%,"
+                                    f" reason: {r.get('skip_reason','unknown')})"
+                                    for r in skipped_low
+                                )
+                            ),
+                            labels=["migration-validator", "skipped-columns", "needs-review"],
+                        )
+                        st.success(f"Jira ticket created: [{_t['key']}]({_t['url']})")
+                except Exception as _ske:
+                    st.error(f"Jira error: {_ske}")
+
+    unmatched = [r["source_column"] for r in rows if not r.get("skip_validation") and not r.get("target_column")]
     if unmatched:
         st.warning(f"No target match for: {', '.join(unmatched)} — pick one above or it will be skipped from validation.")
-    if low_conf:
-        st.info(f"Matched below high confidence: {', '.join(low_conf)} — review these; a flagged mismatch can still be correct.")
+    if low_conf_rows:
+        _lc_col1, _lc_col2 = st.columns([3, 1])
+        with _lc_col1:
+            st.info(f"Matched below high confidence: {', '.join(r['source_column'] for r in low_conf_rows)} — review these; a flagged mismatch can still be correct.")
+        with _lc_col2:
+            if st.button("🎫 Raise Jira ticket", key=f"{key_prefix}_inline_jira_btn"):
+                try:
+                    from gemini_connector.jira_client import create_ticket, is_configured
+                    if not is_configured():
+                        st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in `.env`.")
+                    else:
+                        _t = create_ticket(
+                            summary=f"[Migration Validator] Low-confidence mappings: {pg_table}",
+                            description=(
+                                f"Table: {pg_table}\n\nLow-confidence column mappings:\n"
+                                + "\n".join(f"  - {r['source_column']} → {r['target_column']} ({int(r['confidence']*100)}%)" for r in low_conf_rows)
+                            ),
+                            labels=["migration-validator", "needs-review"],
+                        )
+                        st.success(f"Jira ticket created: [{_t['key']}]({_t['url']})")
+                except Exception as _lce:
+                    st.error(f"Jira error: {_lce}")
 
     overrides = {
         row["Source Column"]: row["Corrected Target"]
@@ -1309,13 +1386,63 @@ with tab_single:
         # Show confidence warnings inline so the user sees them BEFORE clicking
         # Generate — no need to visit a separate Review tab.
         _single_rows = st.session_state.get("single_mapping_rows") or []
-        _single_low  = [r for r in _single_rows if not r.get("skip_validation") and r.get("target_column") and r.get("confidence", 1.0) < 0.75]
+        _single_corrected = set(column_overrides.keys()) if column_overrides else set()
+        # skipped columns (no target match) that are still low-conf and not user-corrected
+        _single_skipped_low = [
+            r for r in _single_rows
+            if r.get("skip_validation") and not r.get("target_column")
+            and r["source_column"] not in _single_corrected
+            and r.get("confidence", 0.0) < 0.75
+        ]
+        _single_low  = [
+            r for r in _single_rows
+            if not r.get("skip_validation") and r.get("target_column")
+            and r["source_column"] not in _single_corrected
+            and r.get("confidence", 1.0) < 0.75
+        ]
         _single_none = [r for r in _single_rows if not r.get("skip_validation") and not r.get("target_column")]
-        _single_needs_review = _single_low or _single_none
+        _single_needs_review = _single_skipped_low or _single_low or _single_none
 
+        _single_generate_blocked = False
         if _single_needs_review and source_table and sf_table:
             with st.container(border=True):
                 st.markdown("##### ⚠️ Review required before generating")
+                if _single_skipped_low:
+                    _ssk_c1, _ssk_c2 = st.columns([3, 1])
+                    with _ssk_c1:
+                        st.warning(
+                            f"**{len(_single_skipped_low)} column(s) skipped — no target match found** "
+                            f"(confidence <75%):\n\n"
+                            + "\n".join(
+                                f"- `{r['source_column']}` ({int(r.get('confidence',0)*100)}%,"
+                                f" {r.get('skip_reason','no match')})"
+                                for r in _single_skipped_low
+                            )
+                            + "\n\nSet a **Corrected Target** in the mapping grid above to include them, "
+                            "or raise a Jira ticket and check the box below to proceed."
+                        )
+                    with _ssk_c2:
+                        if st.button("🎫 Raise Jira ticket", key="single_skipped_jira_btn"):
+                            try:
+                                from gemini_connector.jira_client import create_ticket, is_configured
+                                if not is_configured():
+                                    st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in `.env`.")
+                                else:
+                                    _t = create_ticket(
+                                        summary=f"[Migration Validator] Skipped columns need mapping: {source_table}",
+                                        description=(
+                                            f"Table: {source_table} → {sf_table}\n\nColumns skipped (no target match, confidence <75%):\n"
+                                            + "\n".join(
+                                                f"  - {r['source_column']} (conf {int(r.get('confidence',0)*100)}%,"
+                                                f" reason: {r.get('skip_reason','unknown')})"
+                                                for r in _single_skipped_low
+                                            )
+                                        ),
+                                        labels=["migration-validator", "skipped-columns", "needs-review"],
+                                    )
+                                    st.success(f"Jira ticket created: [{_t['key']}]({_t['url']})")
+                            except Exception as _ssje:
+                                st.error(f"Jira error: {_ssje}")
                 if _single_none:
                     st.error(
                         f"**{len(_single_none)} column(s) have no target match** — they will be skipped "
@@ -1336,7 +1463,7 @@ with tab_single:
                     with _jira_col2:
                         if st.button("🎫 Raise Jira ticket", key="single_jira_btn"):
                             try:
-                                from gemini_connector.jira_client import create_ticket, is_configured, JiraNotConfiguredError
+                                from gemini_connector.jira_client import create_ticket, is_configured
                                 if not is_configured():
                                     st.info("Jira not configured — set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` in your `.env` to enable.")
                                 else:
@@ -1356,8 +1483,14 @@ with tab_single:
                                     st.success(f"Jira ticket created: [{_ticket['key']}]({_ticket['url']})")
                             except Exception as _je:
                                 st.error(f"Jira error: {_je}")
+                _single_confirmed = st.checkbox(
+                    "I have reviewed the issues above and want to generate anyway (or have raised a Jira ticket)",
+                    key="single_review_confirmed",
+                )
+                if not _single_confirmed:
+                    _single_generate_blocked = True
 
-        if st.button("▶️ Generate SQL + YAML", type="primary", key="single_generate"):
+        if st.button("▶️ Generate SQL + YAML", type="primary", key="single_generate", disabled=_single_generate_blocked):
             if not source_table or not sf_table:
                 st.error("Source table and Snowflake table are required.")
             else:
@@ -1634,16 +1767,61 @@ with tab_batch:
         _batch_issues: list = []
         for _bt in (source_tables or []):
             _bt_rows = st.session_state.get(f"batch_{_bt}_mapping_rows") or []
-            _bt_low  = [r for r in _bt_rows if not r.get("skip_validation") and r.get("target_column") and r.get("confidence", 1.0) < 0.75]
+            _bt_corrected = set((per_table_col_overrides.get(_bt) or {}).keys())
+            _bt_skipped_low = [
+                r for r in _bt_rows
+                if r.get("skip_validation") and not r.get("target_column")
+                and r["source_column"] not in _bt_corrected
+                and r.get("confidence", 0.0) < 0.75
+            ]
+            _bt_low = [
+                r for r in _bt_rows
+                if not r.get("skip_validation") and r.get("target_column")
+                and r["source_column"] not in _bt_corrected
+                and r.get("confidence", 1.0) < 0.75
+            ]
             _bt_none = [r for r in _bt_rows if not r.get("skip_validation") and not r.get("target_column")]
-            if _bt_low or _bt_none:
-                _batch_issues.append({"table": _bt, "low": _bt_low, "none": _bt_none})
+            if _bt_skipped_low or _bt_low or _bt_none:
+                _batch_issues.append({"table": _bt, "skipped_low": _bt_skipped_low, "low": _bt_low, "none": _bt_none})
 
+        _batch_generate_blocked = False
         if _batch_issues and not generate_disabled:
             with st.container(border=True):
                 st.markdown("##### ⚠️ Review required before generating")
                 for _bi in _batch_issues:
                     st.markdown(f"**{_bi['table']}**")
+                    if _bi.get("skipped_low"):
+                        _bsk_c1, _bsk_c2 = st.columns([3, 1])
+                        with _bsk_c1:
+                            st.warning(
+                                f"{len(_bi['skipped_low'])} column(s) skipped — no target match (confidence <75%): "
+                                + ", ".join(
+                                    f"`{r['source_column']}` ({int(r.get('confidence',0)*100)}%)"
+                                    for r in _bi["skipped_low"]
+                                )
+                            )
+                        with _bsk_c2:
+                            if st.button("🎫 Raise Jira ticket", key=f"batch_skip_jira_{_bi['table']}"):
+                                try:
+                                    from gemini_connector.jira_client import create_ticket, is_configured
+                                    if not is_configured():
+                                        st.info("Jira not configured — set env vars in `.env`.")
+                                    else:
+                                        _t = create_ticket(
+                                            summary=f"[Migration Validator] Skipped columns: {_bi['table']}",
+                                            description=(
+                                                f"Table: {_bi['table']}\n\nSkipped columns (no target, conf <75%):\n"
+                                                + "\n".join(
+                                                    f"  - {r['source_column']} ({int(r.get('confidence',0)*100)}%,"
+                                                    f" {r.get('skip_reason','no match')})"
+                                                    for r in _bi["skipped_low"]
+                                                )
+                                            ),
+                                            labels=["migration-validator", "skipped-columns", "needs-review"],
+                                        )
+                                        st.success(f"[{_t['key']}]({_t['url']})")
+                                except Exception as _bsje:
+                                    st.error(f"Jira error: {_bsje}")
                     if _bi["none"]:
                         st.error(
                             f"No target match for: "
@@ -1683,8 +1861,14 @@ with tab_batch:
                                 st.success(f"Created {len(_created)} ticket(s): {', '.join(_created)}")
                         except Exception as _bje:
                             st.error(f"Jira error: {_bje}")
+                _batch_confirmed = st.checkbox(
+                    "I have reviewed the issues above and want to generate anyway (or have raised Jira tickets)",
+                    key="batch_review_confirmed",
+                )
+                if not _batch_confirmed:
+                    _batch_generate_blocked = True
 
-        if st.button("▶️ Generate All", type="primary", key="batch_generate", disabled=generate_disabled):
+        if st.button("▶️ Generate All", type="primary", key="batch_generate", disabled=generate_disabled or _batch_generate_blocked):
             extractor = ExtractorFactory.create(
                 src_db_type, host=rec["host"], port=int(rec.get("port") or 0),
                 database=database, username=rec["username"], password=source_password(rec),
@@ -1852,165 +2036,255 @@ with tab_custom:
                 _ai_tables = []
                 st.warning(f"Could not list tables: {_exc}")
 
-            _ait1, _ait2 = st.columns([3, 1])
-            with _ait1:
-                ai_selected_tables = st.multiselect(
-                    "Tables to include as context (select 1 or more — AI can JOIN across them)",
-                    options=_ai_tables,
-                    key="cst_ai_tables",
-                    placeholder="Pick tables…",
-                )
-            with _ait2:
-                ai_model = select_or_type(
-                    "AI model", available_models_for_ui(),
-                    os.getenv("DIAL_MODEL", "gpt-4o"),
-                    "cst_ai_model", format_func=_model_label,
-                )
+            # shared model picker above both sections
+            ai_model = select_or_type(
+                "AI model", available_models_for_ui(),
+                os.getenv("DIAL_MODEL", "gpt-4o"),
+                "cst_ai_model", format_func=_model_label,
+            )
 
-            # ── Schema preview ───────────────────────────────────────────────
-            if ai_selected_tables:
-                with st.expander("📋 Schema preview (what the AI sees)", expanded=False):
-                    for _tbl in ai_selected_tables:
-                        try:
-                            _cols = cached_source_columns(
-                                cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
-                                cst_database, cst_rec["username"], source_password(cst_rec),
-                                cst_rec.get("auth", ""), cst_rec.get("s3_output", ""),
-                                cst_schema, _tbl,
-                            )
-                            st.markdown(f"**{cst_schema}.{_tbl}** — {len(_cols)} column(s)")
-                            st.code(", ".join(_cols), language="text")
-                        except Exception as _e:
-                            st.warning(f"Could not load columns for {_tbl}: {_e}")
-
-            # ── Prompt ───────────────────────────────────────────────────────
+            # shared prompt + validation name
             ai_prompt = st.text_area(
-                "Describe the SQL you need (plain English)",
+                "Describe the SQL you need (plain English — same description drives both source and target generation)",
                 key="cst_ai_prompt",
-                height=120,
+                height=100,
                 placeholder=(
                     "Examples:\n"
-                    "• Show all employees with their manager's name, department name, salary, "
-                    "and years of experience (DATEDIFF from hire_date), ordered by salary descending.\n"
-                    "• Monthly total sales by region joined with the customer dimension — "
-                    "only active customers, grain = month + region.\n"
-                    "• Find duplicate email addresses across the contacts table.\n"
-                    "• Count of GL line items per account code where amount > 0, "
-                    "joined with the chart_of_accounts table."
+                    "• Employees with department name, location, budget and salary (base + total) ordered by salary desc.\n"
+                    "• Monthly total sales by region — only active customers, grain = month + region.\n"
+                    "• Find duplicate email addresses across the contacts table."
                 ),
             )
 
             _ai_validation_name = st.text_input(
-                "Validation name (this becomes the entry name in the section below)",
+                "Validation name",
                 value="ai_generated_check",
                 key="cst_ai_val_name",
-                placeholder="e.g. employee_manager_salary",
+                placeholder="e.g. employee_salary_check",
             )
 
-            _aig_col1, _aig_col2 = st.columns([2, 5])
-            with _aig_col1:
-                _do_gen = st.button(
-                    "✨ Generate SQL",
+            st.markdown("---")
+
+            # ── Two side-by-side generation sections ─────────────────────────
+            _AI_SQL_KEY = "cst_ai_result_sql"
+            _SF_SQL_KEY = "cst_ai_sf_result_sql"
+
+            _sec_src, _sec_sf = st.columns(2)
+
+            # ── LEFT: Source SQL generation ───────────────────────────────────
+            with _sec_src:
+                st.markdown(f"**🗄️ Source SQL — {cst_db_type.upper()}**")
+                ai_selected_tables = st.multiselect(
+                    "Tables to include",
+                    options=_ai_tables,
+                    key="cst_ai_tables",
+                    placeholder="Pick source tables…",
+                )
+                _do_gen_src = st.button(
+                    f"✨ Generate {cst_db_type.upper()} SQL",
                     type="primary",
                     key="cst_ai_generate",
                     disabled=not (ai_selected_tables and ai_prompt.strip()),
                 )
+                if not ai_selected_tables:
+                    st.caption("Select at least one table to enable.")
 
-            if not ai_selected_tables:
-                st.caption("Select at least one table above to enable generation.")
-            elif not ai_prompt.strip():
-                st.caption("Describe what the query should do to enable generation.")
+                if _do_gen_src:
+                    _schema_ctx = {}
+                    with st.spinner("Loading source schema…"):
+                        for _tbl in ai_selected_tables:
+                            try:
+                                _ext = ExtractorFactory.create(
+                                    cst_db_type,
+                                    host=cst_rec["host"],
+                                    port=int(cst_rec.get("port") or 0),
+                                    database=cst_database,
+                                    username=cst_rec["username"],
+                                    password=source_password(cst_rec),
+                                    auth=cst_rec.get("auth", ""),
+                                    s3_output=cst_rec.get("s3_output", ""),
+                                )
+                                _col_metas = _ext.extract_columns(cst_schema, _tbl)
+                                _schema_ctx[f"{cst_schema}.{_tbl}"] = [
+                                    {
+                                        "column_name": c.column_name,
+                                        "data_type": c.data_type,
+                                        "is_nullable": c.is_nullable,
+                                        "is_primary_key": c.is_primary_key,
+                                    }
+                                    for c in _col_metas
+                                ]
+                            except Exception as _exc:
+                                st.warning(f"Could not load schema for {_tbl}: {_exc}")
 
-            _AI_SQL_KEY = "cst_ai_result_sql"
-
-            if _do_gen:
-                # Build full schema context — extract column metadata for each table
-                _schema_ctx = {}
-                with st.spinner("Loading column metadata…"):
-                    for _tbl in ai_selected_tables:
-                        try:
-                            _ext = ExtractorFactory.create(
-                                cst_db_type,
-                                host=cst_rec["host"],
-                                port=int(cst_rec.get("port") or 0),
-                                database=cst_database,
-                                username=cst_rec["username"],
-                                password=source_password(cst_rec),
-                                auth=cst_rec.get("auth", ""),
-                                s3_output=cst_rec.get("s3_output", ""),
-                            )
-                            _col_metas = _ext.extract_columns(cst_schema, _tbl)
-                            _schema_ctx[f"{cst_schema}.{_tbl}"] = [
-                                {
-                                    "column_name": c.column_name,
-                                    "data_type": c.data_type,
-                                    "is_nullable": c.is_nullable,
-                                    "is_primary_key": c.is_primary_key,
+                    if _schema_ctx:
+                        # Detect PKs for comment + auto-fill
+                        _src_pks = [
+                            col["column_name"]
+                            for tbl_cols in _schema_ctx.values()
+                            for col in tbl_cols
+                            if col.get("is_primary_key")
+                        ]
+                        with st.spinner("Generating source SQL…"):
+                            try:
+                                _gen = AISQLQueryGenerator(model=ai_model)
+                                _result = _gen.generate_schema_aware_query(
+                                    user_instruction=ai_prompt.strip(),
+                                    schema_context=_schema_ctx,
+                                    db_type=cst_db_type,
+                                    default_schema=cst_schema,
+                                )
+                                _pk_comment = f"-- PK: {', '.join(_src_pks)}\n" if _src_pks else ""
+                                st.session_state[_AI_SQL_KEY] = {
+                                    "sql": _pk_comment + _result.query,
+                                    "confidence": _result.confidence,
+                                    "prompt": ai_prompt.strip(),
+                                    "schema_ctx": _schema_ctx,
+                                    "pks": _src_pks,
                                 }
-                                for c in _col_metas
-                            ]
-                        except Exception as _exc:
-                            st.warning(f"Could not load schema for {_tbl}: {_exc}")
+                            except AISQLGenerationError as _exc:
+                                st.error(f"Source SQL generation failed: {_exc}")
+                                st.session_state.pop(_AI_SQL_KEY, None)
+                    else:
+                        st.error("Could not load column schema — check connection.")
 
-                if _schema_ctx:
-                    with st.spinner("AI is writing your SQL…"):
-                        try:
-                            from generated_queries.ai_sql_generator import AISQLQueryGenerator, AISQLGenerationError
-                            _gen = AISQLQueryGenerator(model=ai_model)
-                            _result = _gen.generate_schema_aware_query(
-                                user_instruction=ai_prompt.strip(),
-                                schema_context=_schema_ctx,
-                                db_type=cst_db_type,
-                                default_schema=cst_schema,
-                            )
-                            st.session_state[_AI_SQL_KEY] = {
-                                "sql": _result.query,
-                                "confidence": _result.confidence,
-                                "explanation": _result.explanation,
-                                "tables": list(_schema_ctx.keys()),
-                                "prompt": ai_prompt.strip(),
-                            }
-                        except AISQLGenerationError as _exc:
-                            st.error(f"SQL generation failed: {_exc}")
-                            st.session_state.pop(_AI_SQL_KEY, None)
-                else:
-                    st.error("Could not load column schema for any selected table — check connection.")
+                _ai_result = st.session_state.get(_AI_SQL_KEY)
+                if _ai_result:
+                    st.markdown(
+                        f"<div style='font-size:0.8rem;font-weight:600;color:#4F46E5;margin-top:8px;'>"
+                        f"Generated {cst_db_type.upper()} SQL "
+                        f"<span style='color:#059669;margin-left:6px;'>confidence {int(_ai_result['confidence']*100)}%</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    if _ai_result.get("pks"):
+                        st.caption(f"Suggested PK: `{', '.join(_ai_result['pks'])}`")
+                    st.code(_ai_result["sql"], language="sql")
+                    if st.button("🔄 Regenerate source", key="cst_ai_regen_src"):
+                        st.session_state.pop(_AI_SQL_KEY, None)
+                        st.rerun()
 
+            # ── RIGHT: Snowflake SQL generation ──────────────────────────────
+            with _sec_sf:
+                st.markdown("**❄️ Snowflake SQL (target)**")
+                _sf_tbl_opts = []
+                if cst_sf_database and cst_sf_schema:
+                    try:
+                        _sf_tbl_opts = cached_sf_tables(cst_sf_database, cst_sf_schema)
+                    except Exception:
+                        pass
+                ai_selected_sf_tables = st.multiselect(
+                    "Snowflake tables to include",
+                    options=_sf_tbl_opts,
+                    key="cst_ai_sf_tables",
+                    placeholder="Pick Snowflake tables…" if _sf_tbl_opts else "Select Snowflake schema first (Step ②)",
+                    disabled=not _sf_tbl_opts,
+                )
+                _do_gen_sf = st.button(
+                    "✨ Generate Snowflake SQL",
+                    type="primary",
+                    key="cst_ai_sf_generate",
+                    disabled=not (ai_selected_sf_tables and ai_prompt.strip()),
+                )
+                if not _sf_tbl_opts:
+                    st.caption("Complete Step ② (Snowflake schema) to enable.")
+                elif not ai_selected_sf_tables:
+                    st.caption("Select at least one Snowflake table to enable.")
+
+                if _do_gen_sf:
+                    _sf_schema_ctx = {}
+                    with st.spinner("Loading Snowflake schema…"):
+                        for _tbl in ai_selected_sf_tables:
+                            try:
+                                _sf_col_metas = SnowflakeExtractor(database=cst_sf_database).extract_columns(cst_sf_schema, _tbl)
+                                _sf_schema_ctx[f"{cst_sf_schema}.{_tbl}"] = [
+                                    {
+                                        "column_name": c.column_name,
+                                        "data_type": c.data_type,
+                                        "is_nullable": c.is_nullable,
+                                        "is_primary_key": c.is_primary_key,
+                                    }
+                                    for c in _sf_col_metas
+                                ]
+                            except Exception as _exc:
+                                st.warning(f"Could not load Snowflake schema for {_tbl}: {_exc}")
+
+                    if _sf_schema_ctx:
+                        _sf_pks = [
+                            col["column_name"]
+                            for tbl_cols in _sf_schema_ctx.values()
+                            for col in tbl_cols
+                            if col.get("is_primary_key")
+                        ]
+                        with st.spinner("Generating Snowflake SQL…"):
+                            try:
+                                _sf_gen = AISQLQueryGenerator(model=ai_model)
+                                _sf_result = _sf_gen.generate_schema_aware_query(
+                                    user_instruction=ai_prompt.strip(),
+                                    schema_context=_sf_schema_ctx,
+                                    db_type="snowflake",
+                                    default_schema=cst_sf_schema,
+                                )
+                                _sf_pk_comment = f"-- PK: {', '.join(_sf_pks)}\n" if _sf_pks else ""
+                                st.session_state[_SF_SQL_KEY] = {
+                                    "sql": _sf_pk_comment + _sf_result.query,
+                                    "confidence": _sf_result.confidence,
+                                    "pks": _sf_pks,
+                                }
+                            except AISQLGenerationError as _exc:
+                                st.error(f"Snowflake SQL generation failed: {_exc}")
+                                st.session_state.pop(_SF_SQL_KEY, None)
+                    else:
+                        st.error("Could not load Snowflake column schema — check connection.")
+
+                _sf_ai_result = st.session_state.get(_SF_SQL_KEY)
+                if _sf_ai_result:
+                    st.markdown(
+                        f"<div style='font-size:0.8rem;font-weight:600;color:#059669;margin-top:8px;'>"
+                        f"Generated Snowflake SQL "
+                        f"<span style='color:#64748B;margin-left:6px;'>confidence {int(_sf_ai_result['confidence']*100)}%</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    if _sf_ai_result.get("pks"):
+                        st.caption(f"Suggested PK: `{', '.join(_sf_ai_result['pks'])}`")
+                    st.code(_sf_ai_result["sql"], language="sql")
+                    if st.button("🔄 Regenerate Snowflake", key="cst_ai_regen_sf"):
+                        st.session_state.pop(_SF_SQL_KEY, None)
+                        st.rerun()
+
+            st.markdown("---")
+
+            # ── Add as validation entry ───────────────────────────────────────
             _ai_result = st.session_state.get(_AI_SQL_KEY)
-            if _ai_result:
-                st.markdown(
-                    f"<div style='margin-top:12px;font-size:0.8rem;font-weight:600;color:#4F46E5;'>"
-                    f"Generated {cst_db_type.upper()} SQL "
-                    f"<span style='color:#059669;margin-left:8px;'>confidence {int(_ai_result['confidence']*100)}%</span>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                st.code(_ai_result["sql"], language="sql")
-
-                _add_col, _regen_col, _ = st.columns([2, 2, 4])
-                with _add_col:
-                    if st.button("➕ Add as validation entry below", key="cst_ai_add_entry", type="primary"):
-                        nxt = len(st.session_state.get(_CST_KEY, []))
-                        new_entry = _cst_blank_entry(nxt)
-                        new_entry["name"] = _ai_validation_name.strip().replace(" ", "_").lower() or f"ai_check_{nxt+1}"
-                        new_entry["description"] = f"AI-generated — {_ai_result['prompt'][:80]}"
+            _sf_ai_result = st.session_state.get(_SF_SQL_KEY)
+            _can_add = bool(_ai_result or _sf_ai_result)
+            if _can_add:
+                if st.button("➕ Add as validation entry below", key="cst_ai_add_entry", type="primary"):
+                    nxt = len(st.session_state.get(_CST_KEY, []))
+                    new_entry = _cst_blank_entry(nxt)
+                    new_entry["name"] = _ai_validation_name.strip().replace(" ", "_").lower() or f"ai_check_{nxt+1}"
+                    new_entry["description"] = f"AI-generated — {(_ai_result or _sf_ai_result or {}).get('prompt', ai_prompt)[:80]}"
+                    if _ai_result:
                         new_entry["source_sql"] = _ai_result["sql"]
-                        if _CST_KEY not in st.session_state:
-                            st.session_state[_CST_KEY] = []
-                        st.session_state[_CST_KEY].append(new_entry)
-                        st.session_state.pop(_AI_SQL_KEY, None)
-                        flash(f"Added '{new_entry['name']}' to validation entries below — add the Snowflake SQL there.", icon="✅")
-                        st.rerun()
-                with _regen_col:
-                    if st.button("🔄 Regenerate", key="cst_ai_regen"):
-                        st.session_state.pop(_AI_SQL_KEY, None)
-                        st.rerun()
-
-                st.info(
-                    "After adding the entry below, open it and paste or generate the matching "
-                    "**Snowflake SQL** in the right-hand pane, then set the PK column(s) for row alignment.",
-                    icon="ℹ️",
-                )
+                        if _ai_result.get("pks"):
+                            new_entry["pk_source"] = ", ".join(_ai_result["pks"])
+                    if _sf_ai_result:
+                        new_entry["target_sql"] = _sf_ai_result["sql"]
+                        if _sf_ai_result.get("pks"):
+                            new_entry["pk_target"] = ", ".join(_sf_ai_result["pks"])
+                    if _CST_KEY not in st.session_state:
+                        st.session_state[_CST_KEY] = []
+                    st.session_state[_CST_KEY].append(new_entry)
+                    st.session_state.pop(_AI_SQL_KEY, None)
+                    st.session_state.pop(_SF_SQL_KEY, None)
+                    _sides = []
+                    if _ai_result:
+                        _sides.append("source")
+                    if _sf_ai_result:
+                        _sides.append("Snowflake")
+                    flash(f"Added '{new_entry['name']}' ({' + '.join(_sides)} SQL) — review the entry below.", icon="✅")
+                    st.rerun()
 
     # ── Step 5 — Validation entries ───────────────────────────────────────────
     st.markdown("**⑤ Validation entries**")
@@ -2075,19 +2349,16 @@ with tab_custom:
                     f"</div>",
                     unsafe_allow_html=True,
                 )
+                _src_hints = {
+                    "mssql":      "SELECT\n    FORMAT(order_date,'yyyy-MM') AS month,\n    region,\n    SUM(amount) AS total_sales\nFROM dbo.sales s\nJOIN dbo.dim_customer c ON s.customer_id=c.id\nGROUP BY FORMAT(order_date,'yyyy-MM'), region",
+                    "athena":     "SELECT\n    date_trunc('month', order_date) AS month,\n    region,\n    SUM(amount) AS total_sales\nFROM schema.sales s\nJOIN schema.dim_customer c ON s.customer_id=c.id\nGROUP BY 1, 2",
+                    "postgresql": "SELECT\n    DATE_TRUNC('month', order_date) AS month,\n    region,\n    SUM(amount)                    AS total_sales\nFROM sales s\nJOIN dim_customer c ON s.customer_id=c.id\nGROUP BY 1, 2",
+                }
                 entry["source_sql"] = st.text_area(
                     "Source SQL",
                     value=entry["source_sql"], key=f"{entry_key}_src_sql",
                     height=220,
-                    placeholder=(
-                        "SELECT\n"
-                        "    DATE_TRUNC('month', order_date) AS month,\n"
-                        "    region,\n"
-                        "    SUM(amount)                    AS total_sales\n"
-                        "FROM sales s\n"
-                        "JOIN dim_customer c ON s.customer_id = c.id\n"
-                        "GROUP BY 1, 2"
-                    ),
+                    placeholder=_src_hints.get(cst_db_type, _src_hints["postgresql"]),
                     label_visibility="collapsed",
                 )
             with _s2:
@@ -2142,29 +2413,34 @@ with tab_custom:
     valid_entries = [e for e in entries if e.get("source_sql", "").strip() and e.get("target_sql", "").strip() and e.get("name", "").strip()]
 
     if valid_entries and cst_rec:
-        src_key = f"src_{cst_rec['index']}"
-        _yaml_blocks = {}
+        _tables_dict = {}
         for e in valid_entries:
             vname = e["name"].strip().replace(" ", "_").lower()
-            block = {
-                "source": src_key,
+            block_type = "data_validation" if e["validation_type"] == "data" else "count_validation"
+            inner = {
+                "source_table_name": vname,
+                "source": cst_db_type or "postgresql",
+                "source_database": cst_database,
+                "source_schema": cst_schema,
                 "sourcequery": e["source_sql"].strip(),
+                "target_table_name": vname,
                 "target": "snowflake",
+                "target_database": cst_sf_database,
+                "target_schema": cst_sf_schema,
                 "targetquery": e["target_sql"].strip(),
             }
-            if e["validation_type"] == "data":
+            if block_type == "data_validation":
                 pk_src = [c.strip() for c in e["pk_source"].split(",") if c.strip()]
                 pk_tgt = [c.strip() for c in e["pk_target"].split(",") if c.strip()]
                 if pk_src:
-                    block["pksourcecolumn"] = pk_src if len(pk_src) > 1 else pk_src[0]
+                    inner["pksourcecolumn"] = pk_src if len(pk_src) > 1 else pk_src[0]
                 if pk_tgt:
-                    block["pktargetcolumn"] = pk_tgt if len(pk_tgt) > 1 else pk_tgt[0]
-            _yaml_blocks[vname] = block
+                    inner["pktargetcolumn"] = pk_tgt if len(pk_tgt) > 1 else pk_tgt[0]
+            _tables_dict[vname] = {"validations": {block_type: inner}}
 
         vtype_folder = "data_validation"
-        # Use first entry name as the YAML file stem, or a generic name
         yaml_stem = valid_entries[0]["name"].strip().replace(" ", "_").lower() if len(valid_entries) == 1 else "custom_validations"
-        yaml_payload = {"tables": {yaml_stem: {"validations": _yaml_blocks}}}
+        yaml_payload = {"tables": _tables_dict}
 
         yaml_str = _yaml.dump(yaml_payload, default_flow_style=False, sort_keys=False, allow_unicode=True)
 

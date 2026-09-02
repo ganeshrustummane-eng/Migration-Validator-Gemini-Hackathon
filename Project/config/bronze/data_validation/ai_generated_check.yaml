@@ -1,0 +1,33 @@
+tables:
+  ai_generated_check:
+    validations:
+      data_validation:
+        source_table_name: ai_generated_check
+        source: mssql
+        source_database: migration_test
+        source_schema: dbo
+        sourcequery: "SELECT \n    COALESCE(CAST(e.employee_id AS VARCHAR(MAX)), '<<NULL>>')\
+          \ AS employee_id,\n    COALESCE(LTRIM(RTRIM(e.first_name)), '<<NULL>>')\
+          \ AS first_name,\n    COALESCE(LTRIM(RTRIM(e.last_name)), '<<NULL>>') AS\
+          \ last_name,\n    COALESCE(LTRIM(RTRIM(d.dept_name)), '<<NULL>>') AS department_name,\n\
+          \    COALESCE(CAST(d.budget AS VARCHAR(MAX)), '<<NULL>>') AS department_budget,\n\
+          \    COALESCE(CAST(s.base_salary AS VARCHAR(MAX)), '<<NULL>>') AS base_salary,\n\
+          \    COALESCE(CAST(s.bonus AS VARCHAR(MAX)), '<<NULL>>') AS bonus\nFROM\
+          \ \n    dbo.employees e\nLEFT JOIN \n    dbo.departments d ON e.dept_id\
+          \ = d.dept_id\nLEFT JOIN \n    dbo.salaries s ON e.employee_id = s.employee_id;"
+        target_table_name: ai_generated_check
+        target: snowflake
+        target_database: MIGRATION_TEST
+        target_schema: PUBLIC
+        targetquery: "SELECT \n    COALESCE(CAST(e.EMPLOYEE_ID AS STRING), '<<NULL>>')\
+          \ AS EMPLOYEE_ID,\n    COALESCE(CAST(e.FIRST_NAME AS STRING), '<<NULL>>')\
+          \ AS FIRST_NAME,\n    COALESCE(CAST(e.LAST_NAME AS STRING), '<<NULL>>')\
+          \ AS LAST_NAME,\n    COALESCE(CAST(d.DEPT_NAME AS STRING), '<<NULL>>') AS\
+          \ DEPARTMENT_NAME,\n    COALESCE(CAST(d.BUDGET AS STRING), '<<NULL>>') AS\
+          \ DEPARTMENT_BUDGET,\n    COALESCE(CAST(s.BASE_SALARY AS STRING), '<<NULL>>')\
+          \ AS BASE_SALARY,\n    COALESCE(CAST(s.BONUS AS STRING), '<<NULL>>') AS\
+          \ BONUS\nFROM \n    PUBLIC.EMPLOYEES e\nLEFT JOIN \n    PUBLIC.DEPARTMENTS\
+          \ d ON e.DEPT_ID = d.DEPT_ID\nLEFT JOIN \n    PUBLIC.SALARIES s ON e.EMPLOYEE_ID\
+          \ = s.EMPLOYEE_ID;"
+        pksourcecolumn: employee_id
+        pktargetcolumn: EMPLOYEE_ID
