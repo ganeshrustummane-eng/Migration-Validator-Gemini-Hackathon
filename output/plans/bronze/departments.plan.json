@@ -15,7 +15,7 @@
   "source_table": "migration_test.dbo.departments",
   "target_table": "MIGRATION_TEST.PUBLIC.DEPARTMENTS",
   "status": "complete",
-  "generated_at": "2026-09-01T18:40:00.125022",
+  "generated_at": "2026-09-01T21:08:13.184072",
   "generated_by": "ai",
   "model_used": "gpt-4o",
   "ai_calls_made": 0,

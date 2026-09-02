@@ -192,14 +192,24 @@ for validation in validation_dirs:
                         logger.debug("Source row count: %s", source_rows)
                         logger.debug("Target row count: %s", target_rows)
 
-                        # Support both scalar PK (string) and composite PK (list)
+                        # Support both scalar PK (string) and composite PK (list).
+                        # The target SELECT always aliases using the SOURCE column name
+                        # (e.g. ORDER_ID AS "ord_id_normalized"), so pktargetcolumn in
+                        # older/hand-edited YAMLs may point to the target DB name which
+                        # won't exist in the result set.  Fall back to pksourcecolumn
+                        # when pktargetcolumn is absent from the DataFrame.
                         if isinstance(pksourcecolumn, list):
                             pk_src = [c.lower() for c in pksourcecolumn]
-                            pk_tgt = [c.lower() for c in pktargetcolumn]
+                            pk_tgt_raw = [c.lower() for c in (pktargetcolumn or pksourcecolumn)]
+                            pk_tgt = [
+                                c if c in target_df.columns else pk_src[i]
+                                for i, c in enumerate(pk_tgt_raw)
+                            ]
                             composite = True
                         else:
                             pk_src = pksourcecolumn.lower()
-                            pk_tgt = pktargetcolumn.lower()
+                            pk_tgt_raw = (pktargetcolumn or pksourcecolumn).lower()
+                            pk_tgt = pk_tgt_raw if pk_tgt_raw in target_df.columns else pk_src
                             composite = False
 
                         src = source_df.set_index(pk_src).sort_index()

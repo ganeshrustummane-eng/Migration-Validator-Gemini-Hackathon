@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "source": {
+    "database": "mv_db_test",
+    "db_type": "postgresql",
+    "schema": "mv_analytics",
+    "table": "orders"
+  },
+  "target": {
+    "database": "SNOWFLAKE_TARGET_DB",
+    "db_type": "snowflake",
+    "schema": "MV_ANALYTICS",
+    "table": "ORDERS"
+  },
+  "source_table": "mv_db_test.mv_analytics.orders",
+  "target_table": "SNOWFLAKE_TARGET_DB.MV_ANALYTICS.ORDERS",
+  "status": "complete",
+  "generated_at": "2026-09-01T23:10:57.943152",
+  "generated_by": "ai",
+  "model_used": "gpt-4o",
+  "ai_calls_made": 4,
+  "has_fivetran_active": false,
+  "primary_keys": {
+    "source": [
+      "ord_id"
+    ],
+    "target": [
+      "ORDER_ID"
+    ],
+    "mismatch": true,
+    "mismatch_reason": "Source PK ['ord_id'] does not match target PK ['ORDER_ID'] (normalized: ['ordid'] vs ['orderid']). Using fuzzy/AI matching — verify manually."
+  },
+  "stats": {
+    "total_source_columns": 8,
+    "active_mappings": 8,
+    "skipped_mappings": 0,
+    "exact_matches": 0,
+    "fuzzy_matches": 0,
+    "ai_resolved": 4,
+    "unmatched_source": 0
+  },
+  "exclusions": {
+    "total_source_columns": 8,
+    "validated": 8,
+    "excluded": [],
+    "excluded_count": 0,
+    "coverage_pct": 100.0
+  },
+  "warnings": [
+    "PK name mismatch (WARNING): Source PK ['ord_id'] does not match target PK ['ORDER_ID'] (normalized: ['ordid'] vs ['orderid']). Using fuzzy/AI matching — verify manually."
+  ],
+  "ambiguities": [],
+  "unmatched_source_columns": [],
+  "unmatched_target_columns": [],
+  "mappings": [
+    {
+      "source_column": "ord_id",
+      "source_type": "integer",
+      "source_normalized": "ordid",
+      "target_column": "ORDER_ID",
+      "target_type": "NUMBER",
+      "target_normalized": "orderid",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "integer",
+      "validation_rules": [],
+      "reason": "Exact match on normalized names ('ordid' → 'orderid') and matching types (integer → NUMBER) with high fuzzy score and identical ordinal positions.",
+      "fuzzy_score": 0.833,
+      "confidence_breakdown": {
+        "name_similarity": 0.833,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.783
+      },
+      "ai_resolved": true,
+      "is_primary_key": true
+    },
+    {
+      "source_column": "cust_id",
+      "source_type": "integer",
+      "source_normalized": "custid",
+      "target_column": "CUSTOMER_ID",
+      "target_type": "NUMBER",
+      "target_normalized": "customerid",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "integer",
+      "validation_rules": [],
+      "reason": "Exact match on type, high fuzzy match score, and matching ordinal position.",
+      "fuzzy_score": 0.75,
+      "confidence_breakdown": {
+        "name_similarity": 0.75,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.75
+      },
+      "ai_resolved": true
+    },
+    {
+      "source_column": "ord_dt",
+      "source_type": "date",
+      "source_normalized": "orddt",
+      "target_column": "ORDER_DATE",
+      "target_type": "DATE",
+      "target_normalized": "orderdate",
+      "match_method": "learned",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by learned (confidence=1.00)"
+    },
+    {
+      "source_column": "tot_amt",
+      "source_type": "numeric",
+      "source_normalized": "totamt",
+      "target_column": "TOTAL_AMOUNT",
+      "target_type": "NUMBER",
+      "target_normalized": "totalamount",
+      "match_method": "learned",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by learned (confidence=1.00)"
+    },
+    {
+      "source_column": "ord_sts",
+      "source_type": "character varying",
+      "source_normalized": "ordsts",
+      "target_column": "ORDER_STATUS",
+      "target_type": "TEXT",
+      "target_normalized": "orderstatus",
+      "match_method": "learned",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by learned (confidence=1.00)"
+    },
+    {
+      "source_column": "shp_addr",
+      "source_type": "text",
+      "source_normalized": "shpaddr",
+      "target_column": "SHIPPING_ADDRESS",
+      "target_type": "TEXT",
+      "target_normalized": "shippingaddress",
+      "match_method": "learned",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by learned (confidence=1.00)"
+    },
+    {
+      "source_column": "itm_cnt",
+      "source_type": "integer",
+      "source_normalized": "itmcnt",
+      "target_column": "ITEM_COUNT",
+      "target_type": "NUMBER",
+      "target_normalized": "itemcount",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "integer",
+      "validation_rules": [],
+      "reason": "Exact match on type, position, and high fuzzy score with strong semantic alignment.",
+      "fuzzy_score": 0.8,
+      "confidence_breakdown": {
+        "name_similarity": 0.8,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.77
+      },
+      "ai_resolved": true
+    },
+    {
+      "source_column": "disc_pct",
+      "source_type": "numeric",
+      "source_normalized": "discpct",
+      "target_column": "DISCOUNT_PCT",
+      "target_type": "NUMBER",
+      "target_normalized": "discountpct",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "numeric",
+      "validation_rules": [],
+      "reason": "The source column 'disc_pct' closely matches the target column 'DISCOUNT_PCT' in both name and type, with the highest fuzzy score (0.778) and matching nullable property.",
+      "fuzzy_score": 0.778,
+      "confidence_breakdown": {
+        "name_similarity": 0.778,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.761
+      },
+      "ai_resolved": true
+    }
+  ]
+}

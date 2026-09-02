@@ -27,6 +27,27 @@ def is_configured() -> bool:
     return bool(JIRA_URL and JIRA_EMAIL and JIRA_API_TOKEN and JIRA_PROJECT_KEY)
 
 
+def test_connection() -> dict:
+    """Verify credentials by calling /rest/api/3/myself. Returns {"ok": True, "display_name": "..."}.
+    Raises JiraNotConfiguredError or JiraError on failure."""
+    if not is_configured():
+        raise JiraNotConfiguredError(
+            "Jira isn't configured — set JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN, JIRA_PROJECT_KEY in .env."
+        )
+    try:
+        resp = requests.get(
+            f"{JIRA_URL}/rest/api/3/myself",
+            auth=(JIRA_EMAIL, JIRA_API_TOKEN),
+            headers={"Accept": "application/json"},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise JiraError(f"Could not reach Jira at {JIRA_URL}: {exc}") from exc
+    if resp.status_code != 200:
+        raise JiraError(f"Auth failed ({resp.status_code}): {resp.text[:200]}")
+    return {"ok": True, "display_name": resp.json().get("displayName", JIRA_EMAIL)}
+
+
 def create_ticket(summary: str, description: str, labels: list = None) -> dict:
     """Creates a Jira issue via the Cloud REST API v3. Returns {"key": "...", "url": "..."}.
 

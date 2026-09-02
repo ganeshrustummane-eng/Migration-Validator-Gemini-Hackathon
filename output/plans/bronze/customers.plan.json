@@ -1,0 +1,191 @@
+{
+  "schema_version": 1,
+  "source": {
+    "database": "mv_db_test",
+    "db_type": "postgresql",
+    "schema": "mv_demo",
+    "table": "customers"
+  },
+  "target": {
+    "database": "SNOWFLAKE_TARGET_DB",
+    "db_type": "snowflake",
+    "schema": "MV_DEMO",
+    "table": "CUSTOMERS"
+  },
+  "source_table": "mv_db_test.mv_demo.customers",
+  "target_table": "SNOWFLAKE_TARGET_DB.MV_DEMO.CUSTOMERS",
+  "status": "partial",
+  "generated_at": "2026-09-01T22:35:00.735323",
+  "generated_by": "ai",
+  "model_used": "gpt-4o",
+  "ai_calls_made": 2,
+  "has_fivetran_active": false,
+  "primary_keys": {
+    "source": [
+      "cust_id"
+    ],
+    "target": [
+      "CUSTOMER_ID"
+    ],
+    "mismatch": true,
+    "mismatch_reason": "Source PK ['cust_id'] does not match target PK ['CUSTOMER_ID'] (normalized: ['custid'] vs ['customerid']). Using fuzzy/AI matching — verify manually."
+  },
+  "stats": {
+    "total_source_columns": 8,
+    "active_mappings": 7,
+    "skipped_mappings": 1,
+    "exact_matches": 5,
+    "fuzzy_matches": 0,
+    "ai_resolved": 2,
+    "unmatched_source": 1
+  },
+  "exclusions": {
+    "total_source_columns": 8,
+    "validated": 7,
+    "excluded": [
+      {
+        "column": "rgn_cd",
+        "type": "character varying",
+        "reason": "Best fuzzy candidate score 0.72 below threshold 0.75"
+      }
+    ],
+    "excluded_count": 1,
+    "coverage_pct": 87.5
+  },
+  "warnings": [
+    "PK name mismatch (WARNING): Source PK ['cust_id'] does not match target PK ['CUSTOMER_ID'] (normalized: ['custid'] vs ['customerid']). Using fuzzy/AI matching — verify manually.",
+    "1 source column(s) are unmatched and will be skipped: rgn_cd"
+  ],
+  "ambiguities": [],
+  "unmatched_source_columns": [
+    "rgn_cd"
+  ],
+  "unmatched_target_columns": [],
+  "mappings": [
+    {
+      "source_column": "cust_id",
+      "source_type": "integer",
+      "source_normalized": "custid",
+      "target_column": "CUSTOMER_ID",
+      "target_type": "NUMBER",
+      "target_normalized": "customerid",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "integer",
+      "validation_rules": [],
+      "reason": "Exact match on type (integer → NUMBER), high fuzzy score (0.750), and matching normalized names ('custid' → 'customerid').",
+      "fuzzy_score": 0.75,
+      "confidence_breakdown": {
+        "name_similarity": 0.75,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.75
+      },
+      "ai_resolved": true,
+      "is_primary_key": true
+    },
+    {
+      "source_column": "cust_nm",
+      "source_type": "character varying",
+      "source_normalized": "custnm",
+      "target_column": "CUSTOMER_NAME",
+      "target_type": "TEXT",
+      "target_normalized": "customername",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by configured (confidence=1.00)"
+    },
+    {
+      "source_column": "cust_email",
+      "source_type": "character varying",
+      "source_normalized": "custemail",
+      "target_column": "EMAIL_ADDRESS",
+      "target_type": "TEXT",
+      "target_normalized": "emailaddress",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by configured (confidence=1.00)"
+    },
+    {
+      "source_column": "phn_no",
+      "source_type": "character varying",
+      "source_normalized": "phnno",
+      "target_column": "PHONE_NUMBER",
+      "target_type": "TEXT",
+      "target_normalized": "phonenumber",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by configured (confidence=1.00)"
+    },
+    {
+      "source_column": "acct_crt_dt",
+      "source_type": "date",
+      "source_normalized": "acctcrtdt",
+      "target_column": "ACCOUNT_CREATED_DATE",
+      "target_type": "DATE",
+      "target_normalized": "accountcreateddate",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by configured (confidence=1.00)"
+    },
+    {
+      "source_column": "acct_bal_amt",
+      "source_type": "numeric",
+      "source_normalized": "acctbalamt",
+      "target_column": "ACCOUNT_BALANCE",
+      "target_type": "NUMBER",
+      "target_normalized": "accountbalance",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Matched by configured (confidence=1.00)"
+    },
+    {
+      "source_column": "is_actv",
+      "source_type": "boolean",
+      "source_normalized": "isactv",
+      "target_column": "IS_ACTIVE",
+      "target_type": "BOOLEAN",
+      "target_normalized": "isactive",
+      "match_method": "fuzzy_ai",
+      "confidence": 0.95,
+      "transformation_rule": "boolean",
+      "validation_rules": [],
+      "reason": "Exact type match (boolean → BOOLEAN) and high fuzzy match score (0.857) with identical nullable and position attributes.",
+      "fuzzy_score": 0.857,
+      "confidence_breakdown": {
+        "name_similarity": 0.857,
+        "type_compatibility": 1.0,
+        "position_proximity": 1.0,
+        "learned_example": 0.0,
+        "final_score": 0.793
+      },
+      "ai_resolved": true
+    },
+    {
+      "source_column": "rgn_cd",
+      "source_type": "character varying",
+      "source_normalized": "rgncd",
+      "target_column": "rgn_cd",
+      "target_type": "",
+      "target_normalized": "",
+      "match_method": "skip",
+      "confidence": 0.717,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "Best fuzzy candidate score 0.72 below threshold 0.75",
+      "skip_validation": true,
+      "skip_reason": "Best fuzzy candidate score 0.72 below threshold 0.75"
+    }
+  ]
+}

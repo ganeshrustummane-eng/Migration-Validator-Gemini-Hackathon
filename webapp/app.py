@@ -1126,6 +1126,18 @@ with st.sidebar:
     else:
         st.warning("Snowflake account not configured", icon="⚠️")
 
+    from gemini_connector import jira_client as _jc
+    if _jc.is_configured():
+        st.success(f"Jira: {_jc.JIRA_PROJECT_KEY} @ {_jc.JIRA_URL}", icon="🎫")
+        if st.button("🔎 Test Jira connection", width="stretch", key="_sidebar_jira_test"):
+            try:
+                _info = _jc.test_connection()
+                st.success(f"Jira OK — logged in as {_info['display_name']}", icon="✅")
+            except Exception as _je:
+                st.error(f"Jira error: {_je}", icon="❌")
+    else:
+        st.warning("Jira not configured — set JIRA_URL / JIRA_EMAIL / JIRA_API_TOKEN / JIRA_PROJECT_KEY in .env", icon="🎫")
+
     st.divider()
     st.caption("Live dropdowns (databases/schemas/tables) are cached for 5 minutes.")
     if st.button("🔄 Refresh discovery cache", width='stretch'):
@@ -1353,7 +1365,8 @@ with tab_single:
                                         description=_desc,
                                         labels=["migration-validator", "needs-review"],
                                     )
-                                    st.success(f"Jira ticket created: [{_ticket['key']}]({_ticket['url']})")
+                                    flash(f"Jira ticket {_ticket['key']} created — {_ticket['url']}", icon="🎫")
+                                    st.rerun()
                             except Exception as _je:
                                 st.error(f"Jira error: {_je}")
 
@@ -1679,8 +1692,9 @@ with tab_batch:
                                         description=_bdesc,
                                         labels=["migration-validator", "needs-review"],
                                     )
-                                    _created.append(f"[{_t['key']}]({_t['url']})")
-                                st.success(f"Created {len(_created)} ticket(s): {', '.join(_created)}")
+                                    _created.append(f"{_t['key']}")
+                                flash(f"Created {len(_created)} Jira ticket(s): {', '.join(_created)}", icon="🎫")
+                                st.rerun()
                         except Exception as _bje:
                             st.error(f"Jira error: {_bje}")
 
@@ -2270,12 +2284,13 @@ with tab_execute:
         if st.button("🚀 Run validation", type="primary", key="exec_run", disabled=not selected_tables):
             with st.spinner(f"Running {layer} validation against '{environment}' — this executes real queries..."):
                 try:
-                    result = run_validation(layer, environment, selected_tables, do_count, do_data)
+                    st.session_state["_exec_result"] = run_validation(layer, environment, selected_tables, do_count, do_data)
                 except Exception as exc:
                     st.error(f"Execution failed to start: {exc}")
-                    result = None
+                    st.session_state.pop("_exec_result", None)
 
-            if result:
+        result = st.session_state.get("_exec_result")
+        if result:
                 if result["run_id"] and result["summaries"]:
                     st.success(f"Run complete — run_id `{result['run_id']}`  ·  exit code {result['returncode']}")
                 elif result["run_id"]:
@@ -2297,6 +2312,34 @@ with tab_execute:
                         m2.metric("Passed", n_pass)
                         m3.metric("Failed", n_fail, delta=-n_fail if n_fail else None, delta_color="inverse")
                         render_paginated_df(df, key_prefix=f"exec_summary_{vtype}")
+
+                        # ── Jira: raise tickets for failed tables ───────────────
+                        if n_fail:
+                            from gemini_connector import jira_client as _jc_run
+                            _jira_key = f"exec_jira_{vtype}_{result['run_id']}"
+                            _jira_col, _ = st.columns([1, 3])
+                            with _jira_col:
+                                if st.button(
+                                    f"🎫 Raise Jira ticket ({n_fail} FAIL)",
+                                    key=_jira_key,
+                                    help="Creates one Jira ticket listing all failed tables from this run.",
+                                ):
+                                    if not _jc_run.is_configured():
+                                        st.warning("Jira not configured — set JIRA_URL / JIRA_EMAIL / JIRA_API_TOKEN / JIRA_PROJECT_KEY in .env", icon="🎫")
+                                    else:
+                                        _fail_rows = df[df["status"] != "PASS"]
+                                        _table_col = next((c for c in _fail_rows.columns if "table" in c.lower()), _fail_rows.columns[0])
+                                        _fail_list = "\n".join(f"  - {row[_table_col]}  ({row['status']})" for _, row in _fail_rows.iterrows())
+                                        try:
+                                            _ticket = _jc_run.create_ticket(
+                                                summary=f"[Migration Validator] {n_fail} FAIL — {layer} {vtype.replace('_', ' ')} (run {result['run_id']})",
+                                                description=f"Layer: {layer}\nValidation type: {vtype}\nRun ID: {result['run_id']}\n\nFailed tables:\n{_fail_list}",
+                                                labels=["migration-validator", "validation-failure", layer],
+                                            )
+                                            flash(f"Jira ticket {_ticket['key']} created — {_ticket['url']}", icon="🎫")
+                                            st.rerun()
+                                        except Exception as _je:
+                                            st.error(f"Jira error: {_je}", icon="❌")
 
                 if result["diff_files"]:
                     with st.container(border=True):
@@ -3414,8 +3457,8 @@ with tab_review:
                                             labels=["migration-validator", r.table],
                                         )
                                         st.session_state.pop(_draft_key, None)
-                                        flash(f"Jira ticket {ticket['key']} created", icon="🎫")
-                                        st.success(f"Created [{ticket['key']}]({ticket['url']})", icon="🎫")
+                                        flash(f"Jira ticket {ticket['key']} created — {ticket['url']}", icon="🎫")
+                                        st.rerun()
                                     except jira_client.JiraError as exc:
                                         st.error(f"Jira ticket creation failed: {exc}", icon="❌")
 

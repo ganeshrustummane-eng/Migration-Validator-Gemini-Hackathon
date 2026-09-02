@@ -152,12 +152,15 @@ class YAMLConfigWriter:
         # expression as "{source_col}_normalized", so PK names must match.
         # Use explicit PK lists from the plan when available; fall back to
         # first active column (single-PK tables where list wasn't supplied).
+        # tgt_pk always mirrors src_pk: the target SELECT aliases every expression
+        # using the SOURCE column name (e.g. ORDER_ID AS "ord_id_normalized"),
+        # so main.py must look up the same alias on both sides.
         if source_primary_keys and len(source_primary_keys) > 1:
             src_pk = [f"{c}_normalized" for c in source_primary_keys]
-            tgt_pk = [f"{c}_normalized" for c in (target_primary_keys or source_primary_keys)]
+            tgt_pk = src_pk
         elif source_primary_keys and len(source_primary_keys) == 1:
             src_pk = f"{source_primary_keys[0]}_normalized"
-            tgt_pk = f"{(target_primary_keys or source_primary_keys)[0]}_normalized"
+            tgt_pk = src_pk
         else:
             first_src_col = active[0].source_column if active else "id"
             src_pk = f"{first_src_col}_normalized"
