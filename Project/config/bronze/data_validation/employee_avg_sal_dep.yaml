@@ -1,0 +1,21 @@
+tables:
+  employee_avg_sal_dep:
+    validations:
+      data_validation:
+        source_table_name: employee_avg_sal_dep
+        source: postgresql
+        source_database: fms
+        source_schema: public
+        sourcequery: "SELECT \n    COALESCE(CAST(employee AS TEXT), '<<NULL>>') AS\
+          \ employee,\n    COALESCE(CAST(TO_CHAR(AVG(salary), 'FM999999999.00') AS\
+          \ TEXT), '<<NULL>>') AS average_salary\nFROM \n    public.employee_salary\n\
+          GROUP BY \n    employee\nORDER BY \n    employee;"
+        target_table_name: employee_avg_sal_dep
+        target: snowflake
+        target_database: dev_edge_bronze
+        target_schema: storedge_fms_public
+        targetquery: "SELECT \n    COALESCE(CAST(USER AS STRING), '<<NULL>>') AS DEPARTMENT,\n\
+          \    COALESCE(TO_VARCHAR(AVG(SALARY), '999999999999.99'), '<<NULL>>') AS\
+          \ AVERAGE_SALARY\nFROM \n    storedge_fms_public.EMPLOYEE_SALARY_DATA\n\
+          GROUP BY \n    COALESCE(CAST(USER AS STRING), '<<NULL>>')\nORDER BY \n \
+          \   COALESCE(CAST(USER AS STRING), '<<NULL>>');"

@@ -30,3 +30,21 @@ tables:
         targetquery: |
           SELECT COUNT(*) AS target_row_count
           FROM SNOWFLAKE_TARGET_DB.MV_DEMO.CUSTOMERS;
+  Addresses:
+    validations:
+      count_validation:
+        source_table_name: Addresses
+        source: mssql
+        source_database: DevT5000
+        source_schema: dbo
+        sourcequery: |
+          SELECT COUNT(*) AS source_row_count
+          FROM dbo.Addresses;
+        target_table_name: ADDRESSES
+        target: snowflake
+        target_database: DEV_SITELINK_BRONZE
+        target_schema: AWSDEV_DEVT5000_DBO
+        targetquery: |
+          SELECT COUNT(*) AS target_row_count
+          FROM DEV_SITELINK_BRONZE.AWSDEV_DEVT5000_DBO.ADDRESSES
+          WHERE _FIVETRAN_ACTIVE = TRUE;

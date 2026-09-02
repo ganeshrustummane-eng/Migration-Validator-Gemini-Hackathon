@@ -258,7 +258,15 @@ for validation in validation_dirs:
                         logger.info("Saved row-level results (%d rows) to %s", len(result_df), filepath)
 
                         n_fail_rows = int((result_df["status"] != "PASS").sum())
-                        is_match = (n_fail_rows == 0)
+                        total_rows = len(result_df)
+                        # Optional per-table mismatch threshold (e.g. 0.1 for ≤0.1%)
+                        threshold_pct = float(validation_config.get("mismatch_threshold_pct", 0))
+                        if threshold_pct > 0 and total_rows > 0:
+                            actual_pct = (n_fail_rows / total_rows) * 100
+                            is_match = actual_pct <= threshold_pct
+                            logger.info("Threshold %.4f%% vs actual %.4f%%", threshold_pct, actual_pct)
+                        else:
+                            is_match = (n_fail_rows == 0)
 
                     if is_match:
                         logger.info("Match/Mismatch: Match")
@@ -307,5 +315,26 @@ logger.info("Validation job completed")
 logger.info("End Time: %s", end_time.strftime("%Y-%m-%d %H:%M:%S"))
 logger.info("Duration: %s", total_time_taken)
 logger.info("Total failures: %s", failure_count)
+
+if failure_count > 0:
+    try:
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(BASE_DIR), "src"))
+        from notifier import notify_failure
+        _errs = notify_failure(
+            subject=f"[Migration Validator] {failure_count} failure(s) — {layer[0] if isinstance(layer, list) else layer}",
+            body=(
+                f"Run ID : {run_id}\n"
+                f"Layer  : {layer[0] if isinstance(layer, list) else layer}\n"
+                f"Tables : {', '.join(tables)}\n"
+                f"Failures: {failure_count}\n"
+                f"Duration: {total_time_taken}"
+            ),
+        )
+        if _errs:
+            logger.warning("Notification errors: %s", _errs)
+    except Exception as _ne:
+        logger.warning("Could not send failure notification: %s", _ne)
+
 sys.exit(1 if system_error else 0)
 

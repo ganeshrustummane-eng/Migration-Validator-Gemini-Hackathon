@@ -1281,10 +1281,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_single, tab_batch, tab_custom, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_guide = st.tabs(
+tab_single, tab_batch, tab_custom, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_jira, tab_guide = st.tabs(
     ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "✍️ Custom SQL Validation",
      "🚀 Run Validation", "📈 History & Trends",
-     "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "📘 Guide"]
+     "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "🎫 My Jira Tickets", "📘 Guide"]
 )
 # 📊 Usage & Cost lives in the sidebar (see below); 🤖 Gemini Chat is a
 # floating widget (see end of file) — Review & Approve is back as a tab.
@@ -1326,6 +1326,129 @@ with tab_single:
                 )
             except Exception as exc:
                 st.warning(f"Could not load columns for exclusion picker: {exc}")
+
+        # ── Source data profiling ────────────────────────────────────────────
+        if source_table and col_names:
+            with st.expander("🔬 Source data profile (null %, distinct, min/max)", expanded=False):
+                if st.button("Run profile", key="single_profile_btn"):
+                    _prof_cols = col_names[:30]
+
+                    def _profile_query_pg(cols, sch, tbl):
+                        selects = ['COUNT(*) AS _total'] + [
+                            f'COUNT("{c}") AS "nn_{c}", COUNT(DISTINCT "{c}") AS "dc_{c}", '
+                            f'MIN("{c}"::text) AS "mn_{c}", MAX("{c}"::text) AS "mx_{c}", '
+                            f'SUM(CASE WHEN "{c}"::text = \'\' THEN 1 ELSE 0 END) AS "es_{c}"'
+                            for c in cols
+                        ]
+                        return f'SELECT {", ".join(selects)} FROM {sch}."{tbl}"'
+
+                    def _profile_query_mssql(cols, sch, tbl):
+                        selects = ['COUNT(*) AS _total'] + [
+                            f'COUNT([{c}]) AS [nn_{c}], COUNT(DISTINCT [{c}]) AS [dc_{c}], '
+                            f'MIN(CAST([{c}] AS NVARCHAR(256))) AS [mn_{c}], MAX(CAST([{c}] AS NVARCHAR(256))) AS [mx_{c}], '
+                            f'SUM(CASE WHEN CAST([{c}] AS NVARCHAR(256)) = \'\' THEN 1 ELSE 0 END) AS [es_{c}]'
+                            for c in cols
+                        ]
+                        return f'SELECT {", ".join(selects)} FROM {sch}.[{tbl}]'
+
+                    def _profile_query_athena(cols, sch, tbl):
+                        selects = ['COUNT(*) AS _total'] + [
+                            f'COUNT("{c}") AS "nn_{c}", COUNT(DISTINCT "{c}") AS "dc_{c}", '
+                            f'CAST(MIN("{c}") AS VARCHAR) AS "mn_{c}", CAST(MAX("{c}") AS VARCHAR) AS "mx_{c}", '
+                            f'SUM(CASE WHEN CAST("{c}" AS VARCHAR) = \'\' THEN 1 ELSE 0 END) AS "es_{c}"'
+                            for c in cols
+                        ]
+                        return f'SELECT {", ".join(selects)} FROM {sch}."{tbl}"'
+
+                    try:
+                        import pandas as _pd_prof
+                        import pyodbc as _pyodbc
+                        _pw = source_password(rec)
+                        _host = rec["host"]
+                        _port = int(rec.get("port") or 0)
+                        _user = rec["username"]
+
+                        if src_db_type in ("postgresql", "postgres"):
+                            import psycopg2 as _pg
+                            _conn = _pg.connect(
+                                host=_host, port=_port or 5432,
+                                dbname=database, user=_user, password=_pw,
+                            )
+                            _q = _profile_query_pg(_prof_cols, schema, source_table)
+                        elif src_db_type == "mssql":
+                            _auth = rec.get("auth", "")
+                            _driver = rec.get("driver", "ODBC Driver 18 for SQL Server")
+                            _cs = (
+                                f"DRIVER={{{_driver}}};SERVER={_host},{_port or 1433};"
+                                f"DATABASE={database};"
+                                + (f"UID={_user};PWD={_pw};" if not _auth else f"Trusted_Connection=yes;")
+                                + "TrustServerCertificate=yes;"
+                            )
+                            _conn = _pyodbc.connect(_cs)
+                            _q = _profile_query_mssql(_prof_cols, schema, source_table)
+                        elif src_db_type == "athena":
+                            import pyathena as _pya
+                            _conn = _pya.connect(
+                                aws_access_key_id=_user,
+                                aws_secret_access_key=_pw,
+                                s3_staging_dir=rec.get("s3_output", ""),
+                                region_name=_host,
+                                schema_name=schema,
+                            )
+                            _q = _profile_query_athena(_prof_cols, schema, source_table)
+                        else:
+                            st.warning(f"Profiling not supported for {src_db_type}.")
+                            _conn = None
+
+                        if _conn:
+                            _raw = _pd_prof.read_sql(_q, _conn)
+                            _conn.close()
+                            _row = _raw.iloc[0]
+                            _total = int(_row.get("_total", 0) or 0)
+                            _prof_rows = []
+                            for _c in _prof_cols:
+                                _nn = int(_row.get(f"nn_{_c}", _total) or _total)
+                                _null_pct = round((_total - _nn) / _total * 100, 1) if _total else 0
+                                _prof_rows.append({
+                                    "Column": _c,
+                                    "Null %": _null_pct,
+                                    "Empty %": round(int(_row.get(f"es_{_c}", 0) or 0) / _total * 100, 1) if _total else 0,
+                                    "Distinct": int(_row.get(f"dc_{_c}", 0) or 0),
+                                    "Min": str(_row.get(f"mn_{_c}", "") or ""),
+                                    "Max": str(_row.get(f"mx_{_c}", "") or ""),
+                                })
+                            st.dataframe(_pd_prof.DataFrame(_prof_rows), use_container_width=True, hide_index=True)
+                            if len(col_names) > 30:
+                                st.caption("Showing first 30 columns.")
+                    except Exception as _pe:
+                        st.error(f"Profiling failed: {_pe}")
+
+        # ── Schema drift check ───────────────────────────────────────────────
+        if source_table:
+            _yaml_path = (_PROJECT_DIR / "config" / "bronze" / "data_validation" / f"{source_table}.yaml")
+            if _yaml_path.exists():
+                try:
+                    import yaml as _yd
+                    _ycfg = _yd.safe_load(_yaml_path.read_text(encoding="utf-8")) or {}
+                    _tbl_block = (_ycfg.get("tables") or {}).get(source_table, {})
+                    _dv = (_tbl_block.get("validations") or {}).get("data_validation", {})
+                    _yaml_sql = _dv.get("sourcequery", "")
+                    if _yaml_sql and col_names:
+                        import re as _re
+                        _yaml_cols = set(_re.findall(r'"?(\w+)_normalized"?', _yaml_sql))
+                        _live_cols = {c.lower() for c in col_names}
+                        _dropped = _yaml_cols - _live_cols
+                        _added = _live_cols - _yaml_cols - {c.lower() for c in STATIC_EXCLUDE_COLUMNS}
+                        if _dropped or _added:
+                            with st.container(border=True):
+                                st.warning("⚠️ **Schema drift detected** — source schema changed since the YAML was generated.")
+                                if _dropped:
+                                    st.markdown(f"**Removed from source** (in YAML, gone from DB): `{', '.join(sorted(_dropped))}`")
+                                if _added:
+                                    st.markdown(f"**New in source** (not in YAML): `{', '.join(sorted(_added))}`")
+                                st.caption("Regenerate the YAML to pick up these changes.")
+                except Exception:
+                    pass
 
         static_set = {c.lower() for c in STATIC_EXCLUDE_COLUMNS}
         static_present = sorted(c for c in col_names if c.lower() in static_set)
@@ -2543,7 +2666,32 @@ with tab_execute:
                 "type will be silently skipped for the other (no matching YAML requested for it)."
             )
 
+        _thresh_col, _ = st.columns([2, 4])
+        with _thresh_col:
+            mismatch_threshold = st.number_input(
+                "Acceptable mismatch % (0 = exact match required)",
+                min_value=0.0, max_value=100.0, value=0.0, step=0.1,
+                format="%.2f", key="exec_threshold",
+                help="e.g. 0.10 means ≤0.10% mismatched rows = PASS. Written into the YAML before running.",
+            )
+
         if st.button("🚀 Run validation", type="primary", key="exec_run", disabled=not selected_tables):
+            # Inject mismatch_threshold_pct into data_validation YAMLs before running
+            if mismatch_threshold > 0:
+                import yaml as _yrun
+                for _tbl in picked_data_tables:
+                    _yp = _PROJECT_DIR / "config" / layer / "data_validation" / f"{_tbl}.yaml"
+                    if _yp.exists():
+                        try:
+                            _ydoc = _yrun.safe_load(_yp.read_text(encoding="utf-8")) or {}
+                            for _tentry in (_ydoc.get("tables") or {}).values():
+                                _dv = (_tentry.get("validations") or {}).get("data_validation")
+                                if _dv:
+                                    _dv["mismatch_threshold_pct"] = mismatch_threshold
+                            _yp.write_text(_yrun.dump(_ydoc, default_flow_style=False, sort_keys=False, allow_unicode=True), encoding="utf-8")
+                        except Exception:
+                            pass
+
             with st.spinner(f"Running {layer} validation against '{environment}' — this executes real queries..."):
                 try:
                     result = run_validation(layer, environment, selected_tables, do_count, do_data)
@@ -3031,6 +3179,62 @@ with tab_excl:
 # =============================================================================
 # TAB: Usage & Cost
 # =============================================================================
+with st.sidebar.expander("⏰ Scheduled Runs", expanded=False):
+    st.caption("Run validation automatically on a schedule. Requires the app to stay open.")
+    _sched_layer = st.selectbox("Layer", _LAYERS, key="sched_layer")
+    _sched_env = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="sched_env")
+    _sched_interval = st.selectbox(
+        "Interval", ["Manual only", "Every 1 hour", "Every 6 hours", "Every 12 hours", "Daily (midnight)"],
+        key="sched_interval",
+    )
+    _sched_notify = st.checkbox("Notify on failure (Slack/email)", value=True, key="sched_notify")
+
+    _SCHED_KEY = "sched_job_id"
+    _interval_map = {
+        "Every 1 hour": 3600, "Every 6 hours": 21600,
+        "Every 12 hours": 43200, "Daily (midnight)": 86400,
+    }
+
+    if _sched_interval != "Manual only":
+        _secs = _interval_map[_sched_interval]
+        if st.button("▶ Start schedule", key="sched_start"):
+            if _SCHED_KEY not in st.session_state:
+                try:
+                    from apscheduler.schedulers.background import BackgroundScheduler
+                    _scheduler = BackgroundScheduler()
+
+                    def _scheduled_run():
+                        try:
+                            _r = run_validation(_sched_layer, _sched_env, ["all"], True, True)
+                            if _sched_notify and _r.get("returncode", 0) != 0:
+                                from notifier import notify_failure
+                                notify_failure(
+                                    subject=f"[Scheduled] Validation failure — {_sched_layer}",
+                                    body=f"Run ID: {_r.get('run_id','?')}\n{_r.get('stdout_tail','')[-500:]}",
+                                )
+                        except Exception as _se:
+                            pass  # don't crash the scheduler thread
+
+                    _scheduler.add_job(_scheduled_run, "interval", seconds=_secs)
+                    _scheduler.start()
+                    st.session_state[_SCHED_KEY] = _scheduler
+                    flash(f"Scheduler started — running every {_sched_interval.lower()}.", icon="⏰")
+                except ImportError:
+                    st.error("Install `apscheduler` to enable scheduled runs: `pip install apscheduler`")
+            else:
+                st.info("Scheduler already running.")
+
+    if _SCHED_KEY in st.session_state:
+        st.success("Scheduler is active.")
+        if st.button("⏹ Stop schedule", key="sched_stop"):
+            try:
+                st.session_state[_SCHED_KEY].shutdown(wait=False)
+            except Exception:
+                pass
+            del st.session_state[_SCHED_KEY]
+            flash("Scheduler stopped.", icon="⏹")
+            st.rerun()
+
 with st.sidebar.expander("📊 Usage & Cost", expanded=False):
     import datetime
     from collections import defaultdict
@@ -4001,6 +4205,132 @@ with tab_review:
                     "Reason":    st.column_config.TextColumn("Reason",    width="large"),
                 },
             )
+
+
+# =============================================================================
+# TAB: My Jira Tickets
+# =============================================================================
+with tab_jira:
+    st.subheader("My Jira Tickets")
+    st.caption("Tickets assigned to you in the configured Jira project — update status or attach a validation result.")
+
+    try:
+        from gemini_connector.jira_client import (
+            is_configured, get_my_tickets, get_ticket,
+            transition_ticket, add_comment, JiraError, JiraNotConfiguredError,
+        )
+    except ImportError:
+        get_my_tickets = None
+
+    if get_my_tickets is None or not is_configured():
+        st.info("Jira not configured — add `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT_KEY` to `.env`.")
+    else:
+        _jql_filter = st.text_input(
+            "Extra JQL filter (optional)",
+            placeholder='e.g. priority = High AND labels = "data-migration"',
+            key="jira_jql_extra",
+        )
+        _jira_refresh = st.button("🔄 Refresh tickets", key="jira_refresh")
+
+        _JIRA_TICKETS_KEY = "jira_my_tickets"
+        if _jira_refresh or _JIRA_TICKETS_KEY not in st.session_state:
+            with st.spinner("Fetching your Jira tickets…"):
+                try:
+                    st.session_state[_JIRA_TICKETS_KEY] = get_my_tickets(_jql_filter.strip())
+                except JiraError as _je:
+                    st.error(f"Jira error: {_je}")
+                    st.session_state[_JIRA_TICKETS_KEY] = []
+
+        _tickets = st.session_state.get(_JIRA_TICKETS_KEY, [])
+        if not _tickets:
+            st.info("No open tickets assigned to you.")
+        else:
+            st.caption(f"{len(_tickets)} open ticket(s)")
+
+            _STATUS_COLORS = {
+                "To Do": "#94A3B8", "In Progress": "#F59E0B",
+                "In Review": "#6366F1", "Done": "#10B981",
+            }
+            _PRIORITY_ICONS = {
+                "Highest": "🔴", "High": "🟠", "Medium": "🟡",
+                "Low": "🔵", "Lowest": "⚪",
+            }
+
+            for _tk in _tickets:
+                _status_color = _STATUS_COLORS.get(_tk["status"], "#94A3B8")
+                _priority_icon = _PRIORITY_ICONS.get(_tk["priority"], "")
+                with st.expander(
+                    f"{_priority_icon} **{_tk['key']}** — {_tk['summary']}",
+                    expanded=False,
+                ):
+                    _tc1, _tc2 = st.columns([3, 1])
+                    with _tc1:
+                        st.markdown(
+                            f"<span style='background:{_status_color};color:#fff;"
+                            f"padding:2px 10px;border-radius:12px;font-size:0.78rem;'>"
+                            f"{_tk['status']}</span> &nbsp; "
+                            f"<a href='{_tk['url']}' target='_blank' style='font-size:0.82rem;'>"
+                            f"Open in Jira ↗</a>",
+                            unsafe_allow_html=True,
+                        )
+
+                    # ── Transition buttons ────────────────────────────────────
+                    with _tc2:
+                        _trans_target = (
+                            "In Progress" if _tk["status"] == "To Do"
+                            else "Done" if _tk["status"] == "In Progress"
+                            else None
+                        )
+                        if _trans_target:
+                            if st.button(
+                                f"→ {_trans_target}",
+                                key=f"jira_trans_{_tk['key']}",
+                                type="primary",
+                            ):
+                                try:
+                                    transition_ticket(_tk["key"], _trans_target)
+                                    st.session_state.pop(_JIRA_TICKETS_KEY, None)
+                                    flash(f"{_tk['key']} moved to '{_trans_target}'.", icon="✅")
+                                    st.rerun()
+                                except JiraError as _je:
+                                    st.error(str(_je))
+
+                    # ── Attach validation result as comment ───────────────────
+                    with st.expander("📎 Attach validation result to this ticket", expanded=False):
+                        _yaml_files = sorted(
+                            (p for layer in ["bronze", "silver", "gold"]
+                             for p in (
+                                 Path("config") / layer / "data_validation",
+                                 Path("config") / layer / "count_validation",
+                             )
+                             if p.exists()
+                             for p in p.glob("*.yaml")),
+                            key=lambda p: p.stat().st_mtime, reverse=True,
+                        )
+                        if not _yaml_files:
+                            st.caption("No validation YAMLs found yet.")
+                        else:
+                            _sel_yaml = st.selectbox(
+                                "Validation YAML",
+                                options=_yaml_files,
+                                format_func=lambda p: str(p),
+                                key=f"jira_yaml_{_tk['key']}",
+                            )
+                            _note = st.text_area(
+                                "Notes (optional)",
+                                key=f"jira_note_{_tk['key']}",
+                                height=68,
+                            )
+                            if st.button("📤 Post comment", key=f"jira_comment_{_tk['key']}"):
+                                _comment = (
+                                    f"[Migration Validator] Validation result attached: {_sel_yaml}\n"
+                                    + (f"\n{_note}" if _note.strip() else "")
+                                )
+                                try:
+                                    add_comment(_tk["key"], _comment)
+                                    flash(f"Comment posted on {_tk['key']}.", icon="✅")
+                                except JiraError as _je:
+                                    st.error(str(_je))
 
 
 # =============================================================================
