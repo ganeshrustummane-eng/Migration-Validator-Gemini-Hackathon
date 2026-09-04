@@ -67,14 +67,20 @@ def get_config_output_paths(run_id,layer_type,base_dir,config_path,validation_di
             )
 
             yaml_paths = []
+            config_root = Path(base_dir) / "config" / layer_type[0]
+            report_root = Path(base_dir) / "config" / "report"
+            search_roots = [config_root] + ([report_root] if report_root.exists() else [])
             if 'all' in table_list:
-                all_configs = (os.listdir(os.path.join(base_dir, "config", layer_type[0], validation)))
-                for table in all_configs:
-                    yaml_paths.extend([(os.path.join(base_dir, "config", layer_type[0], validation,f"{table}"))])
-
+                yaml_paths = [str(p) for root in search_roots
+                              for p in root.rglob("*.yaml") if p.parent.name == validation]
             else:
+                all_valid_yamls = {p.stem: str(p) for root in search_roots
+                                   for p in root.rglob("*.yaml") if p.parent.name == validation}
                 for table in table_list:
-                    yaml_paths.extend([(os.path.join(base_dir, "config", layer_type[0], validation,f"{table}.yaml"))])
+                    if table in all_valid_yamls:
+                        yaml_paths.append(all_valid_yamls[table])
+                    else:
+                        yaml_paths.append(str(config_root / validation / f"{table}.yaml"))
 
             configpaths[validation] = yaml_paths
             outputpaths[validation] = path

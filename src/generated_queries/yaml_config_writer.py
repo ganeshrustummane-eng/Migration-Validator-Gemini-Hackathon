@@ -154,17 +154,17 @@ class YAMLConfigWriter:
         # first active column (single-PK tables where list wasn't supplied).
         if source_primary_keys and len(source_primary_keys) > 1:
             src_pk = [f"{c}_normalized" for c in source_primary_keys]
-            tgt_pk = [f"{c}_normalized" for c in (target_primary_keys or source_primary_keys)]
+            tgt_pk = src_pk  # target SQL aliases always use source column names
         elif source_primary_keys and len(source_primary_keys) == 1:
             src_pk = f"{source_primary_keys[0]}_normalized"
-            tgt_pk = f"{(target_primary_keys or source_primary_keys)[0]}_normalized"
+            tgt_pk = src_pk  # target SQL aliases always use source column names
         else:
             first_src_col = active[0].source_column if active else "id"
             src_pk = f"{first_src_col}_normalized"
             tgt_pk = src_pk
 
         def _prep(sql: str) -> str:
-            return _indent_for_yaml(_strip_generator_header(sql), _QUERY_INDENT)
+            return _to_single_line(_strip_generator_header(sql))
 
         yaml_content = _build_data_yaml(
             table_name_source=pg_table,
@@ -238,12 +238,12 @@ class YAMLConfigWriter:
                     "source": source_db_type,
                     "source_database": source_database,
                     "source_schema": pg_schema,
-                    "sourcequery": _strip_generator_header(query_set.row_count_source) + "\n",
+                    "sourcequery": " ".join(_strip_generator_header(query_set.row_count_source).split()),
                     "target_table_name": sf_table or pg_table,
                     "target": "snowflake",
                     "target_database": sf_database,
                     "target_schema": sf_schema,
-                    "targetquery": _strip_generator_header(query_set.row_count_target) + "\n",
+                    "targetquery": " ".join(_strip_generator_header(query_set.row_count_target).split()),
                 }
             }
         }
@@ -540,27 +540,7 @@ def _strip_generator_header(sql: str) -> str:
     return "\n".join(lines).strip() if lines else sql.strip()
 
 
-def _indent_for_yaml(sql: str, indent: int = 10) -> str:
-    """
-    Indent every line of a SQL query for embedding in a YAML literal block (|).
-
-    YAML literal block scalars require ALL content lines to be indented
-    more deeply than the key that introduces the block.
-
-    Example (indent=10):
-        sourcequery: |          ← key at 8-space indent
-          SELECT                ← content at 10-space indent  ✓
-              col1,
-              col2
-          FROM public.events;
-
-    Args:
-        sql   : Cleaned SQL query string
-        indent: Number of spaces to prepend to every content line
-
-    Returns:
-        SQL with each line prefixed by 'indent' spaces.
-    """
-    prefix = " " * indent
-    lines  = sql.strip().splitlines()
-    return "\n".join(f"{prefix}{line}" for line in lines)
+def _to_single_line(sql: str) -> str:
+    """Collapse multi-line SQL to one space-separated line, 10-space indented for YAML block."""
+    single = " ".join(line.strip() for line in sql.splitlines() if line.strip())
+    return " " * _QUERY_INDENT + single

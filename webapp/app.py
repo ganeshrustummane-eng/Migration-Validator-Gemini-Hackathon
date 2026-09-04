@@ -404,6 +404,14 @@ hr { border-color: var(--neutral-200) !important; margin: 1.5rem 0 !important; }
 ::-webkit-scrollbar-track { background: var(--neutral-100); }
 ::-webkit-scrollbar-thumb { background: var(--neutral-200); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
+
+/* ── Sidebar — white background, black text ───────────────────── */
+[data-testid="stSidebar"] { background: #ffffff !important; }
+[data-testid="stSidebar"] * { color: #111111 !important; }
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] select,
+[data-testid="stSidebar"] textarea { background: #f8f9fa !important; border-color: #dee2e6 !important; }
+[data-testid="stSidebar"] button { color: #ffffff !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1256,8 +1264,20 @@ with st.sidebar:
                     st.error(f"✗ {label} — {err}")
 
     st.divider()
-    st.caption("Token usage & cost for this session:")
-    st.code("python token_usage_analysis/report_token_usage.py", language="bash")
+    _sb_recs = _load_token_records()
+    _sb_pricing = _load_pricing()
+    if _sb_recs:
+        _sb_tokens = sum(r.get("total_tokens", 0) for r in _sb_recs)
+        _sb_cost = sum(
+            _cost_for(r.get("model", ""), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), _sb_pricing)
+            for r in _sb_recs
+        )
+        st.markdown(
+            f"**AI usage (all-time):** {len(_sb_recs):,} calls · "
+            f"{_sb_tokens:,} tokens · **${_sb_cost:.4f}**"
+        )
+    else:
+        st.caption("No AI calls logged yet.")
 
 
 # ---------------------------------------------------------------------------
@@ -1281,10 +1301,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-tab_single, tab_batch, tab_custom, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_jira, tab_guide = st.tabs(
+tab_single, tab_batch, tab_custom, tab_execute, tab_history, tab_rules, tab_excl, tab_review, tab_jira, tab_usage, tab_guide = st.tabs(
     ["▶️ Generate Single YAML", "📋 Generate Batch YAML", "✍️ Custom SQL Validation",
      "🚀 Run Validation", "📈 History & Trends",
-     "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "🎫 My Jira Tickets", "📘 Guide"]
+     "📖 Rule Book", "🚫 Exclusions", "✅ Review & Approve", "🎫 My Jira Tickets", "💰 Usage & Cost", "📘 Guide"]
 )
 # 📊 Usage & Cost lives in the sidebar (see below); 🤖 Gemini Chat is a
 # floating widget (see end of file) — Review & Approve is back as a tab.
@@ -2039,6 +2059,65 @@ with tab_batch:
                 st.warning(f"Batch complete: {n_ok}/{len(results)} table(s) generated successfully — see failures above.")
 
 # =============================================================================
+# Row-hash SQL builder — used by Custom SQL tab when a table has no PK.
+# Concatenates every normalized column with '|' separator and MD5-hashes the
+# result.  Column order follows ordinal_position so both sides hash identically.
+# ponytail: Phase 1 — pure hash, no dup_count.  Add GROUP BY + COUNT(*) when
+#           duplicate-row tables are encountered and set-compare fails.
+
+def _build_row_hash_sql(columns: list, table_fqn: str, db_type: str) -> str:
+    """Return a SELECT MD5(<concat of all normalized cols>) AS row_hash FROM table_fqn."""
+    sep = " || '|' || "
+    parts = []
+    for c in columns:
+        col = c["column_name"]
+        dt  = (c.get("data_type") or "text").lower()
+        if db_type in ("postgresql", "postgres"):
+            if "timestamp" in dt:
+                expr = f"COALESCE(CAST(TO_CHAR({col}, 'YYYY-MM-DD HH24:MI:SS') AS TEXT), '<<NULL>>')"
+            elif "date" == dt:
+                expr = f"COALESCE(CAST(TO_CHAR({col}, 'YYYY-MM-DD') AS TEXT), '<<NULL>>')"
+            elif "bool" in dt:
+                expr = f"COALESCE(CAST(CASE WHEN {col} = true THEN '1' WHEN {col} = false THEN '0' ELSE NULL END AS TEXT), '<<NULL>>')"
+            else:
+                expr = f"COALESCE(CAST(TRIM({col}) AS TEXT), '<<NULL>>')"
+        elif db_type in ("mssql", "sqlserver"):
+            if "datetime" in dt or "date" == dt:
+                expr = f"COALESCE(CAST(FORMAT({col}, 'yyyy-MM-dd HH:mm:ss') AS VARCHAR(MAX)), '<<NULL>>')"
+            elif "bit" in dt:
+                expr = f"COALESCE(CAST(CASE WHEN {col} = 1 THEN '1' ELSE '0' END AS VARCHAR(MAX)), '<<NULL>>')"
+            else:
+                expr = f"COALESCE(CAST(LTRIM(RTRIM({col})) AS VARCHAR(MAX)), '<<NULL>>')"
+        elif db_type == "snowflake":
+            if "timestamp" in dt or "date" == dt:
+                expr = f"COALESCE(CAST(TO_VARCHAR({col}, 'YYYY-MM-DD HH24:MI:SS') AS STRING), '<<NULL>>')"
+            elif "boolean" in dt:
+                expr = f"COALESCE(CAST(CASE WHEN {col} = TRUE THEN '1' WHEN {col} = FALSE THEN '0' ELSE NULL END AS STRING), '<<NULL>>')"
+            else:
+                expr = f"COALESCE(CAST(TRIM({col}) AS STRING), '<<NULL>>')"
+        else:  # athena / trino
+            if "timestamp" in dt or "date" == dt:
+                expr = f"COALESCE(CAST(date_format({col}, '%Y-%m-%d %H:%i:%s') AS VARCHAR), '<<NULL>>')"
+            elif "boolean" in dt:
+                expr = f"COALESCE(CAST(CASE WHEN {col} THEN '1' ELSE '0' END AS VARCHAR), '<<NULL>>')"
+            else:
+                expr = f"COALESCE(CAST(TRIM({col}) AS VARCHAR), '<<NULL>>')"
+        parts.append(expr)
+
+    concat_expr = sep.join(parts)
+    if db_type in ("postgresql", "postgres"):
+        hash_expr = f"MD5({concat_expr})"
+    elif db_type in ("mssql", "sqlserver"):
+        hash_expr = f"LOWER(CONVERT(VARCHAR(32), HASHBYTES('MD5', {concat_expr}), 2))"
+    elif db_type == "snowflake":
+        hash_expr = f"MD5({concat_expr})"
+    else:
+        hash_expr = f"MD5({concat_expr})"
+
+    return f"SELECT {hash_expr} AS row_hash\nFROM {table_fqn}"
+
+
+# =============================================================================
 # TAB: Custom SQL Validation
 # DQE writes their own source + target SQL (any join, grain, aggregation, etc.)
 # for N validations, picks PK columns, and we write the YAML directly.
@@ -2188,6 +2267,22 @@ with tab_custom:
 
             st.markdown("---")
 
+            _ai_normalize = st.radio(
+                "Query style",
+                options=["Validation query (COALESCE / <<NULL>> normalized)", "Simple query (plain readable SQL)"],
+                index=0,
+                horizontal=True,
+                key="cst_ai_normalize",
+                help=(
+                    "**Validation query** — adds COALESCE(CAST(...), '<<NULL>>') to every column so "
+                    "the comparison engine can detect NULLs vs empty strings. Use this when you will "
+                    "paste the result into the YAML and run validation.\n\n"
+                    "**Simple query** — clean readable SQL, no normalization wrappers. Use this to "
+                    "explore data or hand-write your own normalization."
+                ),
+            )
+            _ai_do_normalize = "Simple" not in _ai_normalize
+
             # ── Two side-by-side generation sections ─────────────────────────
             _AI_SQL_KEY = "cst_ai_result_sql"
             _SF_SQL_KEY = "cst_ai_sf_result_sql"
@@ -2203,6 +2298,26 @@ with tab_custom:
                     key="cst_ai_tables",
                     placeholder="Pick source tables…",
                 )
+                # Column preview + filter — only show when exactly one table picked
+                _src_col_filter = {}
+                if ai_selected_tables:
+                    for _pt in ai_selected_tables:
+                        try:
+                            _all_cols = cached_source_columns(
+                                cst_db_type, cst_rec["host"], int(cst_rec.get("port") or 0),
+                                cst_database, cst_rec["username"], source_password(cst_rec),
+                                cst_rec.get("auth", ""), cst_rec.get("s3_output", ""), cst_schema, _pt,
+                            )
+                            _picked_cols = st.multiselect(
+                                f"Columns from {_pt} (leave blank = all)",
+                                options=_all_cols,
+                                key=f"cst_src_cols_{_pt}",
+                                placeholder="All columns included by default",
+                            )
+                            _src_col_filter[_pt] = _picked_cols or _all_cols
+                        except Exception:
+                            pass
+
                 _do_gen_src = st.button(
                     f"✨ Generate {cst_db_type.upper()} SQL",
                     type="primary",
@@ -2228,6 +2343,7 @@ with tab_custom:
                                     s3_output=cst_rec.get("s3_output", ""),
                                 )
                                 _col_metas = _ext.extract_columns(cst_schema, _tbl)
+                                _allowed = set(_src_col_filter.get(_tbl) or [c.column_name for c in _col_metas])
                                 _schema_ctx[f"{cst_schema}.{_tbl}"] = [
                                     {
                                         "column_name": c.column_name,
@@ -2235,7 +2351,7 @@ with tab_custom:
                                         "is_nullable": c.is_nullable,
                                         "is_primary_key": c.is_primary_key,
                                     }
-                                    for c in _col_metas
+                                    for c in _col_metas if c.column_name in _allowed
                                 ]
                             except Exception as _exc:
                                 st.warning(f"Could not load schema for {_tbl}: {_exc}")
@@ -2256,14 +2372,23 @@ with tab_custom:
                                     schema_context=_schema_ctx,
                                     db_type=cst_db_type,
                                     default_schema=cst_schema,
+                                    normalize=_ai_do_normalize,
                                 )
                                 _pk_comment = f"-- PK: {', '.join(_src_pks)}\n" if _src_pks else ""
+                                # No PK detected → row-hash SQL only for single-table selections.
+                                # Multi-table = join; the FROM can't be inferred, user must alias a PK in SQL.
+                                _row_hash_sql = ""
+                                if not _src_pks and len(_schema_ctx) == 1:
+                                    _single_tbl_cols = next(iter(_schema_ctx.values()))
+                                    _single_tbl_fqn  = next(iter(_schema_ctx))
+                                    _row_hash_sql = _build_row_hash_sql(_single_tbl_cols, _single_tbl_fqn, cst_db_type)
                                 st.session_state[_AI_SQL_KEY] = {
                                     "sql": _pk_comment + _result.query,
                                     "confidence": _result.confidence,
                                     "prompt": ai_prompt.strip(),
                                     "schema_ctx": _schema_ctx,
                                     "pks": _src_pks,
+                                    "row_hash_sql": _row_hash_sql,
                                 }
                             except AISQLGenerationError as _exc:
                                 st.error(f"Source SQL generation failed: {_exc}")
@@ -2280,9 +2405,23 @@ with tab_custom:
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-                    if _ai_result.get("pks"):
-                        st.caption(f"Suggested PK: `{', '.join(_ai_result['pks'])}`")
+                    _detected_src_pks = _ai_result.get("pks") or []
+                    _src_pk_default = ", ".join(_detected_src_pks) if _detected_src_pks else "row_hash"
+                    _src_pk_override = st.text_input(
+                        "Detected Source PK — edit if needed (comma-separated for composite; 'row_hash' = no-PK mode)",
+                        value=_src_pk_default,
+                        key="cst_ai_src_pk_override",
+                        help="Auto-detected from information_schema. 'row_hash' means no PK was found; a hash-based query is shown below.",
+                    )
+                    if not _detected_src_pks:
+                        if _ai_result.get("row_hash_sql"):
+                            st.warning("No primary key detected. Use the row-hash query below as your source SQL — it hashes every column so rows can be compared without a PK.")
+                            st.code(_ai_result["row_hash_sql"], language="sql")
+                        else:
+                            st.warning("No primary key detected and multiple tables selected — row-hash requires a single table. Add an alias column in your SQL to use as PK (e.g. `ROW_NUMBER() OVER (...) AS row_id`).")
                     st.code(_ai_result["sql"], language="sql")
+                    # Push the overridden PK back so "Add entry" can read it
+                    _ai_result["_pk_override"] = _src_pk_override
                     if st.button("🔄 Regenerate source", key="cst_ai_regen_src"):
                         st.session_state.pop(_AI_SQL_KEY, None)
                         st.rerun()
@@ -2303,6 +2442,21 @@ with tab_custom:
                     placeholder="Pick Snowflake tables…" if _sf_tbl_opts else "Select Snowflake schema first (Step ②)",
                     disabled=not _sf_tbl_opts,
                 )
+                _sf_col_filter = {}
+                if ai_selected_sf_tables:
+                    for _sft in ai_selected_sf_tables:
+                        try:
+                            _sf_all_cols = cached_sf_columns(cst_sf_database, cst_sf_schema, _sft)
+                            _sf_picked = st.multiselect(
+                                f"Columns from {_sft} (leave blank = all)",
+                                options=_sf_all_cols,
+                                key=f"cst_sf_cols_{_sft}",
+                                placeholder="All columns included by default",
+                            )
+                            _sf_col_filter[_sft] = _sf_picked or _sf_all_cols
+                        except Exception:
+                            pass
+
                 _do_gen_sf = st.button(
                     "✨ Generate Snowflake SQL",
                     type="primary",
@@ -2320,6 +2474,7 @@ with tab_custom:
                         for _tbl in ai_selected_sf_tables:
                             try:
                                 _sf_col_metas = SnowflakeExtractor(database=cst_sf_database).extract_columns(cst_sf_schema, _tbl)
+                                _sf_allowed = set(_sf_col_filter.get(_tbl) or [c.column_name for c in _sf_col_metas])
                                 _sf_schema_ctx[f"{cst_sf_schema}.{_tbl}"] = [
                                     {
                                         "column_name": c.column_name,
@@ -2327,7 +2482,7 @@ with tab_custom:
                                         "is_nullable": c.is_nullable,
                                         "is_primary_key": c.is_primary_key,
                                     }
-                                    for c in _sf_col_metas
+                                    for c in _sf_col_metas if c.column_name in _sf_allowed
                                 ]
                             except Exception as _exc:
                                 st.warning(f"Could not load Snowflake schema for {_tbl}: {_exc}")
@@ -2347,12 +2502,19 @@ with tab_custom:
                                     schema_context=_sf_schema_ctx,
                                     db_type="snowflake",
                                     default_schema=cst_sf_schema,
+                                    normalize=_ai_do_normalize,
                                 )
                                 _sf_pk_comment = f"-- PK: {', '.join(_sf_pks)}\n" if _sf_pks else ""
+                                _sf_row_hash_sql = ""
+                                if not _sf_pks and len(_sf_schema_ctx) == 1:
+                                    _sf_single_cols = next(iter(_sf_schema_ctx.values()))
+                                    _sf_single_fqn  = next(iter(_sf_schema_ctx))
+                                    _sf_row_hash_sql = _build_row_hash_sql(_sf_single_cols, _sf_single_fqn, "snowflake")
                                 st.session_state[_SF_SQL_KEY] = {
                                     "sql": _sf_pk_comment + _sf_result.query,
                                     "confidence": _sf_result.confidence,
                                     "pks": _sf_pks,
+                                    "row_hash_sql": _sf_row_hash_sql,
                                 }
                             except AISQLGenerationError as _exc:
                                 st.error(f"Snowflake SQL generation failed: {_exc}")
@@ -2369,9 +2531,22 @@ with tab_custom:
                         f"</div>",
                         unsafe_allow_html=True,
                     )
-                    if _sf_ai_result.get("pks"):
-                        st.caption(f"Suggested PK: `{', '.join(_sf_ai_result['pks'])}`")
+                    _detected_sf_pks = _sf_ai_result.get("pks") or []
+                    _sf_pk_default = ", ".join(_detected_sf_pks) if _detected_sf_pks else "row_hash"
+                    _sf_pk_override = st.text_input(
+                        "Detected Snowflake PK — edit if needed",
+                        value=_sf_pk_default,
+                        key="cst_ai_sf_pk_override",
+                        help="Auto-detected from Snowflake information_schema. 'row_hash' = no-PK hash mode.",
+                    )
+                    if not _detected_sf_pks:
+                        if _sf_ai_result.get("row_hash_sql"):
+                            st.warning("No PK detected on Snowflake side. Use the row-hash query below.")
+                            st.code(_sf_ai_result["row_hash_sql"], language="sql")
+                        else:
+                            st.warning("No PK detected and multiple Snowflake tables selected — row-hash requires a single table.")
                     st.code(_sf_ai_result["sql"], language="sql")
+                    _sf_ai_result["_pk_override"] = _sf_pk_override
                     if st.button("🔄 Regenerate Snowflake", key="cst_ai_regen_sf"):
                         st.session_state.pop(_SF_SQL_KEY, None)
                         st.rerun()
@@ -2389,13 +2564,20 @@ with tab_custom:
                     new_entry["name"] = _ai_validation_name.strip().replace(" ", "_").lower() or f"ai_check_{nxt+1}"
                     new_entry["description"] = f"AI-generated — {(_ai_result or _sf_ai_result or {}).get('prompt', ai_prompt)[:80]}"
                     if _ai_result:
-                        new_entry["source_sql"] = _ai_result["sql"]
-                        if _ai_result.get("pks"):
-                            new_entry["pk_source"] = ", ".join(_ai_result["pks"])
+                        # Use row-hash SQL when no PK was found and the user kept 'row_hash'
+                        _src_pk_val = _ai_result.get("_pk_override") or ", ".join(_ai_result.get("pks") or [])
+                        if _src_pk_val.strip().lower() == "row_hash" and _ai_result.get("row_hash_sql"):
+                            new_entry["source_sql"] = _ai_result["row_hash_sql"]
+                        else:
+                            new_entry["source_sql"] = _ai_result["sql"]
+                        new_entry["pk_source"] = _src_pk_val
                     if _sf_ai_result:
-                        new_entry["target_sql"] = _sf_ai_result["sql"]
-                        if _sf_ai_result.get("pks"):
-                            new_entry["pk_target"] = ", ".join(_sf_ai_result["pks"])
+                        _sf_pk_val = _sf_ai_result.get("_pk_override") or ", ".join(_sf_ai_result.get("pks") or [])
+                        if _sf_pk_val.strip().lower() == "row_hash" and _sf_ai_result.get("row_hash_sql"):
+                            new_entry["target_sql"] = _sf_ai_result["row_hash_sql"]
+                        else:
+                            new_entry["target_sql"] = _sf_ai_result["sql"]
+                        new_entry["pk_target"] = _sf_pk_val
                     if _CST_KEY not in st.session_state:
                         st.session_state[_CST_KEY] = []
                     st.session_state[_CST_KEY].append(new_entry)
@@ -2538,19 +2720,19 @@ with tab_custom:
     if valid_entries and cst_rec:
         _tables_dict = {}
         for e in valid_entries:
-            vname = e["name"].strip().replace(" ", "_").lower()
+            vname = e["name"].strip().replace(" ", "_")
             block_type = "data_validation" if e["validation_type"] == "data" else "count_validation"
             inner = {
                 "source_table_name": vname,
                 "source": cst_db_type or "postgresql",
                 "source_database": cst_database,
                 "source_schema": cst_schema,
-                "sourcequery": e["source_sql"].strip(),
+                "sourcequery": " ".join(e["source_sql"].split()),
                 "target_table_name": vname,
                 "target": "snowflake",
                 "target_database": cst_sf_database,
                 "target_schema": cst_sf_schema,
-                "targetquery": e["target_sql"].strip(),
+                "targetquery": " ".join(e["target_sql"].split()),
             }
             if block_type == "data_validation":
                 pk_src = [c.strip() for c in e["pk_source"].split(",") if c.strip()]
@@ -2562,24 +2744,35 @@ with tab_custom:
             _tables_dict[vname] = {"validations": {block_type: inner}}
 
         vtype_folder = "data_validation"
-        yaml_stem = valid_entries[0]["name"].strip().replace(" ", "_").lower() if len(valid_entries) == 1 else "custom_validations"
+        yaml_stem = valid_entries[0]["name"].strip().replace(" ", "_") if len(valid_entries) == 1 else "custom_validations"
         yaml_payload = {"tables": _tables_dict}
 
-        yaml_str = _yaml.dump(yaml_payload, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        yaml_str = _yaml.dump(yaml_payload, default_flow_style=False, sort_keys=False, allow_unicode=True, Dumper=_yaml.SafeDumper)
 
         with st.expander("📄 YAML preview", expanded=True):
             st.code(yaml_str, language="yaml")
 
-        _save_c1, _save_c2 = st.columns([2, 4])
+        _save_c1, _save_c2, _save_c3 = st.columns([2, 2, 3])
         with _save_c1:
             custom_yaml_filename = st.text_input(
                 "Output filename (without .yaml)",
                 value=yaml_stem, key="cst_yaml_filename",
             )
         with _save_c2:
+            report_subfolder = st.text_input(
+                "Report subfolder (optional)",
+                value="", key="cst_report_subfolder",
+                placeholder="e.g. emanagement",
+                help="If set, saves under config/report/<subfolder>/data_validation/ (independent of layer). Leave blank to save under config/<layer>/data_validation/.",
+            )
+        with _save_c3:
             st.markdown("<div style='height:28px'/>", unsafe_allow_html=True)
             if st.button("💾 Save YAML to config folder", type="primary", key="cst_save"):
-                save_path = cst_output_dir / vtype_folder / f"{custom_yaml_filename}.yaml"
+                if report_subfolder.strip():
+                    save_dir = _ROOT_DIR / "Project" / "config" / "report" / report_subfolder.strip() / vtype_folder
+                else:
+                    save_dir = cst_output_dir / vtype_folder
+                save_path = save_dir / f"{custom_yaml_filename}.yaml"
                 save_path.parent.mkdir(parents=True, exist_ok=True)
                 save_path.write_text(yaml_str, encoding="utf-8")
                 flash(f"Saved: {save_path}", icon="💾")
@@ -2603,58 +2796,106 @@ with tab_execute:
         "then reads back the run's summary — counts and pass/fail status only."
     )
 
-    top1, top2 = st.columns(2)
-    with top1:
+    import pandas as pd
+
+    _exec_top1, _exec_top2 = st.columns(2)
+    with _exec_top1:
         layer = st.selectbox("Medallion layer", _LAYERS, index=0, key="exec_layer")
-    with top2:
+    with _exec_top2:
         environment = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="exec_env")
 
-    tables_by_type = list_configured_tables(layer)
-    count_tables = tables_by_type["count_validation"]
-    data_tables = tables_by_type["data_validation"]
+    # ── Build full YAML inventory (layer + report/, independent) ─────────────
+    # Each row: {stem, vtype, folder_label, yaml_path}
+    def _build_exec_inventory(layer):
+        rows = []
+        # Count validation — single shared YAML per layer
+        _cv_path = _PROJECT_DIR / "config" / layer / "count_validation" / f"{layer}.yaml"
+        if _cv_path.exists():
+            import yaml as _yi
+            _cfg = _yi.safe_load(_cv_path.read_text(encoding="utf-8")) or {}
+            for tbl in (_cfg.get("tables") or {}):
+                rows.append({"stem": tbl, "vtype": "count_validation",
+                             "folder": layer, "path": _cv_path})
+        # Layer data_validation
+        _dv_dir = _PROJECT_DIR / "config" / layer / "data_validation"
+        if _dv_dir.exists():
+            for p in sorted(_dv_dir.glob("*.yaml")):
+                rows.append({"stem": p.stem, "vtype": "data_validation",
+                             "folder": layer, "path": p})
+        # Report/ data_validation — independent of layer
+        _rep_root = _PROJECT_DIR / "config" / "report"
+        if _rep_root.exists():
+            for p in sorted(_rep_root.rglob("*.yaml")):
+                if p.parent.name == "data_validation":
+                    subfolder = p.parent.parent.name
+                    rows.append({"stem": p.stem, "vtype": "data_validation",
+                                 "folder": f"report/{subfolder}", "path": p})
+        return rows
 
-    if not count_tables and not data_tables:
+    _inventory = _build_exec_inventory(layer)
+
+    if not _inventory:
         st.warning(
             f"No YAML configs found for layer '{layer}' yet — generate one first "
             f"in the **Generate Single/Batch YAML** tabs."
         )
     else:
-        import pandas as pd
+        # ── Filters row ──────────────────────────────────────────────────────
+        _fc1, _fc2, _fc3 = st.columns([2, 2, 3])
+        with _fc1:
+            _all_folders = sorted({r["folder"] for r in _inventory})
+            _sel_folders = st.multiselect(
+                "Filter by folder", options=_all_folders,
+                default=_all_folders, key="exec_folder_filter",
+                help="'bronze/silver/gold' = layer configs. 'report/X' = custom report configs.",
+            )
+        with _fc2:
+            _vtype_opts = sorted({r["vtype"] for r in _inventory})
+            _sel_vtypes = st.multiselect(
+                "Validation type", options=_vtype_opts,
+                default=_vtype_opts, key="exec_vtype_filter",
+            )
+        with _fc3:
+            _search = st.text_input(
+                "Search tables", placeholder="Type to filter…", key="exec_search",
+            )
+
+        _filtered = [
+            r for r in _inventory
+            if r["folder"] in (_sel_folders or _all_folders)
+            and r["vtype"] in (_sel_vtypes or _vtype_opts)
+            and (_search.strip().lower() in r["stem"].lower() if _search.strip() else True)
+        ]
+
+        select_all = st.checkbox("Select all", value=True, key="exec_select_all")
+        _sel_set_key = f"exec_sel_{layer}_{select_all}"
 
         file_rows = [
-            {"Run": True, "Validation type": "count_validation",
-             "File": f"config/{layer}/count_validation/{layer}.yaml", "Table": t}
-            for t in count_tables
-        ] + [
-            {"Run": True, "Validation type": "data_validation",
-             "File": f"config/{layer}/data_validation/{t}.yaml", "Table": t}
-            for t in data_tables
+            {"Run": select_all, "Table": r["stem"], "Type": r["vtype"],
+             "Folder": r["folder"], "File": str(r["path"].relative_to(_PROJECT_DIR))}
+            for r in _filtered
         ]
-        select_all = st.checkbox("Select all files", value=True, key="exec_select_all")
-        for row in file_rows:
-            row["Run"] = select_all
-        files_df = pd.DataFrame(file_rows)
+        files_df = pd.DataFrame(file_rows) if file_rows else pd.DataFrame(
+            columns=["Run", "Table", "Type", "Folder", "File"])
 
-        st.caption(f"{len(files_df)} YAML file/table combination(s) for **{layer}** — check the ones to run, one file or many.")
-        # Key includes select_all so toggling it forces a fresh grid instead of
-        # keeping stale per-row edits from before the toggle (data_editor
-        # doesn't allow writing its state via st.session_state directly).
+        st.caption(f"{len(files_df)} of {len(_inventory)} config(s) shown — check the ones to run.")
         edited = st.data_editor(
             files_df,
             column_config={
-                "Run": st.column_config.CheckboxColumn(help="Include this file/table in the run"),
-                "Validation type": st.column_config.TextColumn(disabled=True),
-                "File": st.column_config.TextColumn(disabled=True),
-                "Table": st.column_config.TextColumn(disabled=True),
+                "Run":    st.column_config.CheckboxColumn(help="Include in run"),
+                "Table":  st.column_config.TextColumn(disabled=True),
+                "Type":   st.column_config.TextColumn(disabled=True),
+                "Folder": st.column_config.TextColumn(disabled=True),
+                "File":   st.column_config.TextColumn(disabled=True),
             },
-            hide_index=True, width='stretch', key=f"exec_file_grid_{select_all}",
+            hide_index=True, width="stretch", key=f"exec_file_grid_{_sel_set_key}",
         )
 
         picked_count_tables = edited.loc[
-            (edited["Validation type"] == "count_validation") & edited["Run"], "Table"
+            (edited["Type"] == "count_validation") & edited["Run"], "Table"
         ].tolist()
         picked_data_tables = edited.loc[
-            (edited["Validation type"] == "data_validation") & edited["Run"], "Table"
+            (edited["Type"] == "data_validation") & edited["Run"], "Table"
         ].tolist()
         do_count = bool(picked_count_tables)
         do_data = bool(picked_data_tables)
@@ -2679,8 +2920,11 @@ with tab_execute:
             # Inject mismatch_threshold_pct into data_validation YAMLs before running
             if mismatch_threshold > 0:
                 import yaml as _yrun
+                _search_roots = [_PROJECT_DIR / "config" / layer, _PROJECT_DIR / "config" / "report"]
+                _all_data_yamls = {p.stem: p for root in _search_roots if root.exists()
+                                   for p in root.rglob("*.yaml") if p.parent.name == "data_validation"}
                 for _tbl in picked_data_tables:
-                    _yp = _PROJECT_DIR / "config" / layer / "data_validation" / f"{_tbl}.yaml"
+                    _yp = _all_data_yamls.get(_tbl, _PROJECT_DIR / "config" / layer / "data_validation" / f"{_tbl}.yaml")
                     if _yp.exists():
                         try:
                             _ydoc = _yrun.safe_load(_yp.read_text(encoding="utf-8")) or {}
@@ -3179,150 +3423,76 @@ with tab_excl:
 # =============================================================================
 # TAB: Usage & Cost
 # =============================================================================
-with st.sidebar.expander("⏰ Scheduled Runs", expanded=False):
-    st.caption("Run validation automatically on a schedule. Requires the app to stay open.")
-    _sched_layer = st.selectbox("Layer", _LAYERS, key="sched_layer")
-    _sched_env = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="sched_env")
-    _sched_interval = st.selectbox(
-        "Interval", ["Manual only", "Every 1 hour", "Every 6 hours", "Every 12 hours", "Daily (midnight)"],
-        key="sched_interval",
-    )
-    _sched_notify = st.checkbox("Notify on failure (Slack/email)", value=True, key="sched_notify")
+_SCHED_KEY = "sched_job_id"
+_is_sched_running = _SCHED_KEY in st.session_state
+_sched_label = "⏰ Scheduled Runs  🟢 Active" if _is_sched_running else "⏰ Scheduled Runs"
 
-    _SCHED_KEY = "sched_job_id"
-    _interval_map = {
-        "Every 1 hour": 3600, "Every 6 hours": 21600,
-        "Every 12 hours": 43200, "Daily (midnight)": 86400,
-    }
-
-    if _sched_interval != "Manual only":
-        _secs = _interval_map[_sched_interval]
-        if st.button("▶ Start schedule", key="sched_start"):
-            if _SCHED_KEY not in st.session_state:
-                try:
-                    from apscheduler.schedulers.background import BackgroundScheduler
-                    _scheduler = BackgroundScheduler()
-
-                    def _scheduled_run():
-                        try:
-                            _r = run_validation(_sched_layer, _sched_env, ["all"], True, True)
-                            if _sched_notify and _r.get("returncode", 0) != 0:
-                                from notifier import notify_failure
-                                notify_failure(
-                                    subject=f"[Scheduled] Validation failure — {_sched_layer}",
-                                    body=f"Run ID: {_r.get('run_id','?')}\n{_r.get('stdout_tail','')[-500:]}",
-                                )
-                        except Exception as _se:
-                            pass  # don't crash the scheduler thread
-
-                    _scheduler.add_job(_scheduled_run, "interval", seconds=_secs)
-                    _scheduler.start()
-                    st.session_state[_SCHED_KEY] = _scheduler
-                    flash(f"Scheduler started — running every {_sched_interval.lower()}.", icon="⏰")
-                except ImportError:
-                    st.error("Install `apscheduler` to enable scheduled runs: `pip install apscheduler`")
-            else:
-                st.info("Scheduler already running.")
-
-    if _SCHED_KEY in st.session_state:
-        st.success("Scheduler is active.")
-        if st.button("⏹ Stop schedule", key="sched_stop"):
+with st.sidebar.expander(_sched_label, expanded=False):
+    if _is_sched_running:
+        _sched_info = st.session_state.get("sched_meta", {})
+        st.markdown(
+            f"**Status:** 🟢 Running\n\n"
+            f"**Layer:** `{_sched_info.get('layer','—')}`  "
+            f"**Env:** `{_sched_info.get('env','—')}`  \n"
+            f"**Interval:** {_sched_info.get('interval','—')}"
+        )
+        if st.button("⏹ Stop scheduler", key="sched_stop", type="primary", use_container_width=True):
             try:
                 st.session_state[_SCHED_KEY].shutdown(wait=False)
             except Exception:
                 pass
-            del st.session_state[_SCHED_KEY]
+            for _k in (_SCHED_KEY, "sched_meta"):
+                st.session_state.pop(_k, None)
             flash("Scheduler stopped.", icon="⏹")
             st.rerun()
-
-with st.sidebar.expander("📊 Usage & Cost", expanded=False):
-    import datetime
-    from collections import defaultdict
-
-    st.subheader("AI token usage & estimated cost")
-    st.caption(
-        "Real token counts from every AI call (column mapping + SQL generation), "
-        "logged to token_usage_analysis/logs/token_usage.jsonl. Cost is estimated "
-        "from public list prices — see token_usage_analysis/pricing.json."
-    )
-
-    records = _load_token_records()
-    pricing = _load_pricing()
-
-    if not records:
-        st.info("No AI calls logged yet. Run a Single YAML or Batch YAML generation with an AI key configured.")
     else:
-        def _record_date(r: dict):
-            try:
-                return datetime.datetime.strptime(r["timestamp"], "%Y-%m-%dT%H:%M:%S").date()
-            except Exception:
-                return None
-
-        today = datetime.date.today()
-        last_7 = today - datetime.timedelta(days=6)
-
-        today_records = [r for r in records if _record_date(r) == today]
-        week_records = [r for r in records if (d := _record_date(r)) and last_7 <= d <= today]
-
-        def _totals(recs):
-            tokens = sum(r.get("total_tokens", 0) for r in recs)
-            cost = sum(_cost_for(r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), pricing) for r in recs)
-            return tokens, cost
-
-        today_tokens, today_cost = _totals(today_records)
-        week_tokens, week_cost = _totals(week_records)
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Today — cost", f"${today_cost:.4f}")
-        c2.metric("Today — tokens", f"{today_tokens:,}")
-        c3.metric("Last 7 days — cost", f"${week_cost:.4f}")
-        c4.metric("Last 7 days — tokens", f"{week_tokens:,}")
-        c5.metric("Last 7 days — AI calls", f"{len(week_records):,}")
-
-        st.markdown("**Daily cost — last 7 days**")
-        daily_cost = defaultdict(float)
-        for d_offset in range(6, -1, -1):
-            daily_cost[(today - datetime.timedelta(days=d_offset)).isoformat()] = 0.0
-        for r in week_records:
-            d = _record_date(r)
-            if d:
-                daily_cost[d.isoformat()] += _cost_for(
-                    r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), pricing
-                )
-        import pandas as pd
-        chart_df = pd.DataFrame({"Date": list(daily_cost.keys()), "Cost (USD)": list(daily_cost.values())}).set_index("Date")
-        st.bar_chart(chart_df)
-
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown("**Last 7 days — by model**")
-            by_model = defaultdict(lambda: {"calls": 0, "tokens": 0, "cost": 0.0})
-            for r in week_records:
-                m = r.get("model", "unknown")
-                by_model[m]["calls"] += 1
-                by_model[m]["tokens"] += r.get("total_tokens", 0)
-                by_model[m]["cost"] += _cost_for(m, r.get("prompt_tokens", 0), r.get("completion_tokens", 0), pricing)
-            st.dataframe(
-                [{"Model": m, "Calls": s["calls"], "Tokens": s["tokens"], "Cost (USD)": round(s["cost"], 4)} for m, s in sorted(by_model.items())],
-                width='stretch', hide_index=True,
-            )
-        with col_b:
-            st.markdown("**Last 7 days — by call type**")
-            by_type = defaultdict(lambda: {"calls": 0, "tokens": 0, "cost": 0.0})
-            for r in week_records:
-                t = r.get("call_type", "unknown")
-                by_type[t]["calls"] += 1
-                by_type[t]["tokens"] += r.get("total_tokens", 0)
-                by_type[t]["cost"] += _cost_for(r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), pricing)
-            st.dataframe(
-                [{"Call type": t, "Calls": s["calls"], "Tokens": s["tokens"], "Cost (USD)": round(s["cost"], 4)} for t, s in sorted(by_type.items())],
-                width='stretch', hide_index=True,
-            )
-
+        st.markdown("**Auto-run validation on a fixed schedule.**  \n*App must stay open.*")
         st.divider()
-        all_tokens, all_cost = _totals(records)
-        st.caption(f"All-time: {len(records):,} AI calls · {all_tokens:,} tokens · ${all_cost:.4f} estimated cost.")
-        st.code("python token_usage_analysis/report_token_usage.py --all", language="bash")
+        _sched_layer = st.selectbox("Layer", _LAYERS, key="sched_layer")
+        _sched_env = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="sched_env")
+        _sched_interval = st.selectbox(
+            "Interval",
+            ["Every 1 hour", "Every 6 hours", "Every 12 hours", "Daily (midnight)"],
+            key="sched_interval",
+        )
+        _sched_notify = st.checkbox("🔔 Notify on failure (Slack/email)", value=True, key="sched_notify")
+
+        _interval_map = {
+            "Every 1 hour": 3600, "Every 6 hours": 21600,
+            "Every 12 hours": 43200, "Daily (midnight)": 86400,
+        }
+
+        if st.button("▶ Start scheduler", key="sched_start", type="primary", use_container_width=True):
+            try:
+                from apscheduler.schedulers.background import BackgroundScheduler
+                _scheduler = BackgroundScheduler()
+                _secs = _interval_map[_sched_interval]
+                _snap_layer, _snap_env, _snap_notify = _sched_layer, _sched_env, _sched_notify
+
+                def _scheduled_run():
+                    try:
+                        _r = run_validation(_snap_layer, _snap_env, ["all"], True, True)
+                        if _snap_notify and _r.get("returncode", 0) != 0:
+                            from notifier import notify_failure
+                            notify_failure(
+                                subject=f"[Scheduled] Validation failure — {_snap_layer}",
+                                body=f"Run ID: {_r.get('run_id','?')}\n{_r.get('stdout_tail','')[-500:]}",
+                            )
+                    except Exception:
+                        pass
+
+                _scheduler.add_job(_scheduled_run, "interval", seconds=_secs)
+                _scheduler.start()
+                st.session_state[_SCHED_KEY] = _scheduler
+                st.session_state["sched_meta"] = {
+                    "layer": _sched_layer, "env": _sched_env, "interval": _sched_interval,
+                }
+                flash(f"Scheduler started — {_sched_interval.lower()}.", icon="⏰")
+                st.rerun()
+            except ImportError:
+                st.error("Run `pip install apscheduler` to enable scheduled runs.")
+
+# Usage & Cost moved to tab_usage — see below
 
 # =============================================================================
 # FLOATING WIDGET: Gemini Chat — fixed bottom-right bubble, not a tab.
@@ -4334,6 +4504,99 @@ with tab_jira:
 
 
 # =============================================================================
+# =============================================================================
+# TAB: Usage & Cost
+# =============================================================================
+with tab_usage:
+    import datetime as _dt
+    from collections import defaultdict as _dd
+
+    st.subheader("💰 AI Usage & Cost")
+    st.caption(
+        "Real token counts from every AI call (column mapping + SQL generation), "
+        "logged to token_usage_analysis/logs/token_usage.jsonl. "
+        "Cost estimated from public list prices — see token_usage_analysis/pricing.json."
+    )
+
+    _u_records = _load_token_records()
+    _u_pricing = _load_pricing()
+
+    if not _u_records:
+        st.info("No AI calls logged yet. Run a Single YAML or Batch YAML generation with an AI key configured.")
+    else:
+        def _u_record_date(r: dict):
+            try:
+                return _dt.datetime.strptime(r["timestamp"], "%Y-%m-%dT%H:%M:%S").date()
+            except Exception:
+                return None
+
+        _u_today = _dt.date.today()
+        _u_last7 = _u_today - _dt.timedelta(days=6)
+        _u_today_recs = [r for r in _u_records if _u_record_date(r) == _u_today]
+        _u_week_recs  = [r for r in _u_records if (d := _u_record_date(r)) and _u_last7 <= d <= _u_today]
+
+        def _u_totals(recs):
+            tokens = sum(r.get("total_tokens", 0) for r in recs)
+            cost   = sum(_cost_for(r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), _u_pricing) for r in recs)
+            return tokens, cost
+
+        _u_today_tok, _u_today_cost = _u_totals(_u_today_recs)
+        _u_week_tok,  _u_week_cost  = _u_totals(_u_week_recs)
+        _u_all_tok,   _u_all_cost   = _u_totals(_u_records)
+
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Today — cost",         f"${_u_today_cost:.4f}")
+        c2.metric("Today — tokens",       f"{_u_today_tok:,}")
+        c3.metric("Last 7 days — cost",   f"${_u_week_cost:.4f}")
+        c4.metric("Last 7 days — tokens", f"{_u_week_tok:,}")
+        c5.metric("Last 7 days — calls",  f"{len(_u_week_recs):,}")
+
+        st.divider()
+        st.markdown("**Daily cost — last 7 days**")
+        _u_daily = _dd(float)
+        for _d_off in range(6, -1, -1):
+            _u_daily[(_u_today - _dt.timedelta(days=_d_off)).isoformat()] = 0.0
+        for r in _u_week_recs:
+            d = _u_record_date(r)
+            if d:
+                _u_daily[d.isoformat()] += _cost_for(
+                    r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), _u_pricing
+                )
+        import pandas as _pd_usage
+        _u_chart = _pd_usage.DataFrame({"Date": list(_u_daily.keys()), "Cost (USD)": list(_u_daily.values())}).set_index("Date")
+        st.bar_chart(_u_chart)
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.markdown("**Last 7 days — by model**")
+            _u_by_model = _dd(lambda: {"calls": 0, "tokens": 0, "cost": 0.0})
+            for r in _u_week_recs:
+                m = r.get("model", "unknown")
+                _u_by_model[m]["calls"]  += 1
+                _u_by_model[m]["tokens"] += r.get("total_tokens", 0)
+                _u_by_model[m]["cost"]   += _cost_for(m, r.get("prompt_tokens", 0), r.get("completion_tokens", 0), _u_pricing)
+            st.dataframe(
+                [{"Model": m, "Calls": s["calls"], "Tokens": s["tokens"], "Cost (USD)": round(s["cost"], 4)}
+                 for m, s in sorted(_u_by_model.items())],
+                use_container_width=True, hide_index=True,
+            )
+        with col_b:
+            st.markdown("**Last 7 days — by call type**")
+            _u_by_type = _dd(lambda: {"calls": 0, "tokens": 0, "cost": 0.0})
+            for r in _u_week_recs:
+                t = r.get("call_type", "unknown")
+                _u_by_type[t]["calls"]  += 1
+                _u_by_type[t]["tokens"] += r.get("total_tokens", 0)
+                _u_by_type[t]["cost"]   += _cost_for(r.get("model", "unknown"), r.get("prompt_tokens", 0), r.get("completion_tokens", 0), _u_pricing)
+            st.dataframe(
+                [{"Call type": t, "Calls": s["calls"], "Tokens": s["tokens"], "Cost (USD)": round(s["cost"], 4)}
+                 for t, s in sorted(_u_by_type.items())],
+                use_container_width=True, hide_index=True,
+            )
+
+        st.divider()
+        st.caption(f"All-time: {len(_u_records):,} AI calls · {_u_all_tok:,} tokens · **${_u_all_cost:.4f}** estimated cost.")
+
 # TAB: Guide
 # =============================================================================
 with tab_guide:

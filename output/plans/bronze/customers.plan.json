@@ -15,7 +15,7 @@
   "source_table": "mv_db_test.mv_demo.customers",
   "target_table": "SNOWFLAKE_TARGET_DB.MV_DEMO.CUSTOMERS",
   "status": "complete",
-  "generated_at": "2026-09-02T10:44:14.139040",
+  "generated_at": "2026-09-04T12:39:49.250902",
   "generated_by": "ai",
   "model_used": "gpt-4o",
   "ai_calls_made": 2,
@@ -34,7 +34,7 @@
     "total_source_columns": 8,
     "active_mappings": 8,
     "skipped_mappings": 0,
-    "exact_matches": 6,
+    "exact_matches": 0,
     "fuzzy_matches": 0,
     "ai_resolved": 2,
     "unmatched_source": 0
@@ -64,7 +64,7 @@
       "confidence": 0.95,
       "transformation_rule": "integer",
       "validation_rules": [],
-      "reason": "Exact match on type, high fuzzy score, and matching ordinal position indicate CUSTOMER_ID is the best target.",
+      "reason": "Exact type match and high fuzzy score with aligned ordinal position and nullable property.",
       "fuzzy_score": 0.75,
       "confidence_breakdown": {
         "name_similarity": 0.75,
@@ -83,11 +83,11 @@
       "target_column": "CUSTOMER_NAME",
       "target_type": "TEXT",
       "target_normalized": "customername",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     },
     {
       "source_column": "cust_email",
@@ -96,11 +96,11 @@
       "target_column": "EMAIL_ADDRESS",
       "target_type": "TEXT",
       "target_normalized": "emailaddress",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     },
     {
       "source_column": "phn_no",
@@ -109,11 +109,11 @@
       "target_column": "PHONE_NUMBER",
       "target_type": "TEXT",
       "target_normalized": "phonenumber",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     },
     {
       "source_column": "acct_crt_dt",
@@ -122,11 +122,11 @@
       "target_column": "ACCOUNT_CREATED_DATE",
       "target_type": "DATE",
       "target_normalized": "accountcreateddate",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     },
     {
       "source_column": "acct_bal_amt",
@@ -135,11 +135,11 @@
       "target_column": "ACCOUNT_BALANCE",
       "target_type": "NUMBER",
       "target_normalized": "accountbalance",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     },
     {
       "source_column": "is_actv",
@@ -152,7 +152,7 @@
       "confidence": 0.95,
       "transformation_rule": "boolean",
       "validation_rules": [],
-      "reason": "Exact type match (boolean → BOOLEAN) and high fuzzy match score (0.857) with identical nullable and position attributes.",
+      "reason": "Exact type match and high fuzzy score with identical nullable and position attributes.",
       "fuzzy_score": 0.857,
       "confidence_breakdown": {
         "name_similarity": 0.857,
@@ -170,11 +170,11 @@
       "target_column": "REGION_CODE",
       "target_type": "TEXT",
       "target_normalized": "regioncode",
-      "match_method": "configured",
+      "match_method": "learned",
       "confidence": 1.0,
       "transformation_rule": "text",
       "validation_rules": [],
-      "reason": "Matched by configured (confidence=1.00)"
+      "reason": "Matched by learned (confidence=1.00)"
     }
   ]
 }

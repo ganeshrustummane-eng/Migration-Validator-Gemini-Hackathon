@@ -192,70 +192,149 @@ for validation in validation_dirs:
                         logger.debug("Source row count: %s", source_rows)
                         logger.debug("Target row count: %s", target_rows)
 
+                        # Fall back to row_hash when no PK configured.
+                        if not pksourcecolumn or not pktargetcolumn:
+                            pksourcecolumn = "row_hash"
+                            pktargetcolumn = "row_hash"
+
                         # Support both scalar PK (string) and composite PK (list)
                         if isinstance(pksourcecolumn, list):
                             pk_src = [c.lower() for c in pksourcecolumn]
                             pk_tgt = [c.lower() for c in pktargetcolumn]
-                            composite = True
                         else:
                             pk_src = pksourcecolumn.lower()
                             pk_tgt = pktargetcolumn.lower()
-                            composite = False
 
+                        # row_hash mode: when pk is 'row_hash' but the SQL didn't
+                        # produce that column, compute it in Python from the common
+                        # columns so any JOIN query can be compared without a real PK.
+                        if (pk_src == "row_hash" or (isinstance(pk_src, list) and pk_src == ["row_hash"])) \
+                                and "row_hash" not in source_df.columns:
+                            import hashlib
+                            _common = [c for c in source_df.columns if c in set(target_df.columns)]
+                            def _hash_row(row, cols=_common):
+                                def _v(c):
+                                    v = row[c]
+                                    if v is None or (isinstance(v, float) and v != v):
+                                        return "<<NULL>>"
+                                    return str(v)
+                                return hashlib.md5("|".join(_v(c) for c in cols).encode()).hexdigest()
+                            source_df["row_hash"] = source_df.apply(_hash_row, axis=1)
+                            target_df["row_hash"] = target_df.apply(_hash_row, axis=1)
+                            pk_src = pk_tgt = "row_hash"
+
+                        composite = isinstance(pk_src, list)
                         src = source_df.set_index(pk_src).sort_index()
                         tgt = target_df.set_index(pk_tgt).sort_index()
-                        # Rename target index levels to match source so intersection works
                         if composite:
                             tgt.index.names = src.index.names
                         else:
                             tgt.index.name = src.index.name
 
-                        common_idx    = src.index.intersection(tgt.index)
-                        missing_in_tgt = src.index.difference(tgt.index)
-                        missing_in_src = tgt.index.difference(src.index)
-                        data_cols = list(src.columns)
+                        all_src_cols  = list(src.columns)
+                        all_tgt_cols  = list(tgt.columns)
+                        tgt_col_set   = set(all_tgt_cols)
+                        src_col_set   = set(all_src_cols)
+
+                        # Columns present in both sides — comparison happens only here.
+                        common_cols   = [c for c in all_src_cols if c in tgt_col_set]
+                        # Schema drift — reported as warnings, not row-level FAILs.
+                        src_only_cols = [c for c in all_src_cols if c not in tgt_col_set]
+                        tgt_only_cols = [c for c in all_tgt_cols if c not in src_col_set]
+                        if src_only_cols:
+                            logger.warning(
+                                "Schema drift: column(s) %s exist in SOURCE but not in TARGET — "
+                                "excluded from row comparison; check target schema.",
+                                src_only_cols,
+                            )
+                        if tgt_only_cols:
+                            logger.warning(
+                                "Schema drift: column(s) %s exist in TARGET but not in SOURCE — "
+                                "excluded from row comparison.",
+                                tgt_only_cols,
+                            )
+
+                        # All columns from both sides appear in the output CSV for traceability.
+                        display_cols = all_src_cols + [c for c in all_tgt_cols if c not in src_col_set]
 
                         def _row_key_str(pk_val):
-                            """Composite PK tuples → 'v1|v2'; scalar → str(v)."""
                             if isinstance(pk_val, tuple):
                                 return "|".join(str(v) for v in pk_val)
                             return str(pk_val)
 
-                        # One row per PK — every row present, PASS or FAIL
+                        def _cell_str(v):
+                            """Normalize a cell for comparison:
+                            - None/NaN            → '<<NULL>>'
+                            - float/Decimal       → 2-dp string (matches COALESCE CAST output)
+                            - everything else     → str()
+                            """
+                            if v is None or (isinstance(v, float) and v != v):
+                                return "<<NULL>>"
+                            if isinstance(v, float):
+                                return f"{v:.2f}"
+                            try:
+                                from decimal import Decimal as _Dec
+                                if isinstance(v, _Dec):
+                                    return f"{float(v):.2f}"
+                            except Exception:
+                                pass
+                            return str(v)
+
+                        def _to_df(frame, pk_val):
+                            if pk_val not in frame.index:
+                                return pd.DataFrame(columns=frame.columns)
+                            chunk = frame.loc[pk_val]
+                            return chunk if isinstance(chunk, pd.DataFrame) else chunk.to_frame().T
+
+                        # Single loop over all unique PKs — handles duplicates as sorted multisets
+                        # so row-order differences between engines never cause false FAILs.
+                        # Comparison is on common_cols only; schema drift is logged above.
+                        # ponytail: O(n log n) sort per PK group; fine for migration data volumes.
+                        all_pks = sorted(
+                            set(src.index.unique()) | set(tgt.index.unique()),
+                            key=lambda x: str(x),
+                        )
                         rows = []
-                        for pk_val in common_idx:
-                            s_row = src.loc[pk_val]
-                            t_row = tgt.loc[pk_val]
-                            # Guard: if the PK is not unique, loc returns a DataFrame.
-                            # squeeze() collapses a 1-row DataFrame to a Series so the
-                            # comparison logic below always works on a Series.
-                            if isinstance(s_row, pd.DataFrame):
-                                s_row = s_row.iloc[0]
-                            if isinstance(t_row, pd.DataFrame):
-                                t_row = t_row.iloc[0]
-                            row_status = "PASS" if s_row.equals(t_row) else "FAIL"
-                            rec = {"row_key": _row_key_str(pk_val), "status": row_status}
-                            for col in data_cols:
-                                rec[f"{col}__source"] = s_row[col] if col in s_row.index else ""
-                                rec[f"{col}__target"] = t_row[col] if col in t_row.index else ""
-                            rows.append(rec)
-                        for pk_val in missing_in_tgt:
-                            rec = {"row_key": _row_key_str(pk_val), "status": "SOURCE_ONLY"}
-                            for col in data_cols:
-                                rec[f"{col}__source"] = src.loc[pk_val][col] if col in src.columns else ""
-                                rec[f"{col}__target"] = ""
-                            rows.append(rec)
-                        for pk_val in missing_in_src:
-                            rec = {"row_key": _row_key_str(pk_val), "status": "TARGET_ONLY"}
-                            for col in data_cols:
-                                rec[f"{col}__source"] = ""
-                                rec[f"{col}__target"] = tgt.loc[pk_val][col] if col in tgt.columns else ""
-                            rows.append(rec)
+                        for pk_val in all_pks:
+                            s_df = _to_df(src, pk_val)
+                            t_df = _to_df(tgt, pk_val)
+                            pk_str = _row_key_str(pk_val)
+
+                            def _rec(pk_str, status, s_row=None, t_row=None):
+                                rec = {"row_key": pk_str, "status": status}
+                                for col in display_cols:
+                                    rec[f"{col}__source"] = (s_row[col] if s_row is not None and col in s_row.index else "")
+                                    rec[f"{col}__target"] = (t_row[col] if t_row is not None and col in t_row.index else "")
+                                return rec
+
+                            if s_df.empty:
+                                rows.append(_rec(pk_str, "TARGET_ONLY", t_row=t_df.iloc[0]))
+                            elif t_df.empty:
+                                rows.append(_rec(pk_str, "SOURCE_ONLY", s_row=s_df.iloc[0]))
+                            else:
+                                s_sorted = sorted(
+                                    s_df[common_cols].apply(
+                                        lambda r: "|".join(_cell_str(r[c]) for c in common_cols), axis=1
+                                    ).tolist()
+                                )
+                                t_sorted = sorted(
+                                    t_df[common_cols].apply(
+                                        lambda r: "|".join(_cell_str(r[c]) for c in common_cols), axis=1
+                                    ).tolist()
+                                )
+                                row_status = "PASS" if s_sorted == t_sorted else "FAIL"
+                                rows.append(_rec(pk_str, row_status, s_row=s_df.iloc[0], t_row=t_df.iloc[0]))
 
                         result_df = pd.DataFrame(rows).sort_values("row_key").reset_index(drop=True)
                         filepath = os.path.join(output_path, f"{table_name}_{validation}_result_{run_id}.csv")
                         result_df.to_csv(filepath, index=False)
                         logger.info("Saved row-level results (%d rows) to %s", len(result_df), filepath)
+
+                        failed_df = result_df[result_df["status"] != "PASS"]
+                        if not failed_df.empty:
+                            failed_path = os.path.join(output_path, f"{table_name}_{validation}_failed_{run_id}.csv")
+                            failed_df.to_csv(failed_path, index=False)
+                            logger.info("Saved failed rows (%d rows) to %s", len(failed_df), failed_path)
 
                         n_fail_rows = int((result_df["status"] != "PASS").sum())
                         total_rows = len(result_df)

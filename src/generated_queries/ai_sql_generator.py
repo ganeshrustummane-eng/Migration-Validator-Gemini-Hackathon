@@ -568,6 +568,7 @@ Generate the query now:
         schema_context: dict,
         db_type: str,
         default_schema: str = "",
+        normalize: bool = True,
     ) -> AIGeneratedQuery:
         """
         Generate SQL from a plain-English request with full multi-table schema context.
@@ -615,7 +616,14 @@ Generate the query now:
         schema_block = "\n".join(schema_lines)
         table_list = ", ".join(schema_context.keys())
 
-        system_prompt = self._build_system_prompt(db_type, db_type)
+        if normalize:
+            system_prompt = self._build_system_prompt(db_type, db_type)
+        else:
+            system_prompt = (
+                f"You are an expert SQL developer. Write clean, readable {db_type.upper()} SQL. "
+                "Use correct dialect syntax. No COALESCE normalization, no <<NULL>> sentinels. "
+                "Return ONLY the SQL — no markdown, no explanation."
+            )
         user_prompt = f"""You are writing a {db_type.upper()} SQL query for a Data Quality Engineer.
 
 ## Available tables and their schemas

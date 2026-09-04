@@ -1,7 +1,7 @@
 # ============================================================
 # Migration Validator — Data Validation Config
 # Table      : customers
-# Generated  : 2026-09-02T10:44:14.145807
+# Generated  : 2026-09-04T12:39:49.257299
 # By         : ai (model: gpt-4o)
 # Columns    : 8 comparable columns
 #
@@ -52,7 +52,7 @@ tables:
         target: snowflake
         target_database: SNOWFLAKE_TARGET_DB
         target_schema: MV_DEMO
-        pktargetcolumn: CUSTOMER_ID_normalized
+        pktargetcolumn: cust_id_normalized
         target_audit_column: 
         targetquery: |
           SELECT 

@@ -75,6 +75,7 @@ def get_database(db_type, BASE_DIR, environment,
             user=src["USERNAME"],
             password=src.get("PASSWORD", ""),
             port=int(src.get("PORT") or 5432),
+            schema=override_schema or src.get("SCHEMA", ""),
         )
 
     elif db_type == "mssql":

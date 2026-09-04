@@ -342,13 +342,40 @@ def _column_looks_semi_structured(series):
     return False
 
 
-def canonicalize_frames(source_df, target_df):
-    """Canonicalize semi-structured columns in both frames, symmetrically.
+import re as _re
 
-    Columns are selected by content sniffing, then the *union* of the
-    candidates from both frames is canonicalized on both sides. The union
-    matters: normalizing a column on one side only would guarantee a false
-    mismatch, which is precisely the class of bug this module replaces.
+_NUMERIC_STR_RE = _re.compile(r'^-?\d+\.\d+$')
+
+
+def _normalize_numeric_str(val):
+    """'400000.000000' → '400000.00', '620000.75' → '620000.75'.
+
+    Only touches strings that look like plain decimals so JSON/timestamps/
+    other strings are left alone.  Non-string or non-numeric values pass
+    through unchanged.
+    """
+    if not isinstance(val, str):
+        return val
+    s = val.strip()
+    if not _NUMERIC_STR_RE.match(s):
+        return val
+    try:
+        return f"{float(s):.2f}"
+    except ValueError:
+        return val
+
+
+def canonicalize_frames(source_df, target_df):
+    """Canonicalize semi-structured and numeric columns in both frames, symmetrically.
+
+    1. Numeric strings: both engines emit the same decimal value with different
+       precision ('400000.00' vs '400000.000000').  Round all plain-decimal
+       string columns to 2dp so they compare equal.
+    2. Semi-structured (JSON/JSONB/HStore): canonicalize via canonicalize_value
+       so key order and whitespace don't cause false mismatches.
+
+    The union of candidates from both frames is processed on both sides — never
+    one side only, as that guarantees a false mismatch.
 
     Returns the (possibly modified) frames. Mutates in place and returns for
     call-site convenience.
@@ -358,6 +385,18 @@ def canonicalize_frames(source_df, target_df):
 
     shared = [c for c in source_df.columns if c in set(target_df.columns)]
 
+    # ── 1. Numeric string normalization (2dp) ────────────────────────────────
+    for col in shared:
+        src_sample = source_df[col].dropna()
+        tgt_sample = target_df[col].dropna()
+        # Apply if either side has at least one plain decimal string
+        src_has = src_sample.apply(lambda v: bool(_NUMERIC_STR_RE.match(str(v).strip())) if isinstance(v, str) else False).any()
+        tgt_has = tgt_sample.apply(lambda v: bool(_NUMERIC_STR_RE.match(str(v).strip())) if isinstance(v, str) else False).any()
+        if src_has or tgt_has:
+            source_df[col] = source_df[col].map(_normalize_numeric_str)
+            target_df[col] = target_df[col].map(_normalize_numeric_str)
+
+    # ── 2. Semi-structured canonicalization ──────────────────────────────────
     candidates = [
         col for col in shared
         if _column_looks_semi_structured(source_df[col])
