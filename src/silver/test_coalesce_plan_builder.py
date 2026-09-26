@@ -261,6 +261,33 @@ def test_multisource_node_builds_plan_and_join_sql():
     ) in join_sql
 
 
+def test_multisource_emit_query_set_wraps_and_resolves_join():
+    """ADR 0027 + ADR 0019 together: the multisource Bronze recompute SELECT
+    must have every selected column wrapped in the NULL-placeholder AND the
+    FROM/JOIN clause must still be the macro-resolved join SQL verbatim --
+    the wrapper and the ref() resolution are independent and must not
+    interfere with each other."""
+    plan, diff = _run_build_plan(MULTI_NODE_ID)
+    query_set = emit_query_set(plan)
+
+    assert (
+        'COALESCE(CAST("FACILITIES"."ID" AS STRING), \'<<NULL>>\') AS "FACILITY_ID"'
+        in query_set.main_validation_source
+    )
+    assert (
+        'COALESCE(CAST("COMPANIES"."NAME" AS STRING), \'<<NULL>>\') AS "COMPANY_NAME"'
+        in query_set.main_validation_source
+    )
+    assert 'FROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES" "FACILITIES"' in query_set.main_validation_source
+    assert (
+        'JOIN "BRONZE_EDGE"."CONFORMED_RRADHAKR"."COMPANIES" "COMPANIES" '
+        'ON "FACILITIES"."COMPANY_ID" = "COMPANIES"."ID"'
+    ) in query_set.main_validation_source
+    # Row-count queries stay unwrapped -- no column to wrap, just COUNT(*).
+    assert "COALESCE" not in query_set.row_count_source
+    assert "COALESCE" not in query_set.row_count_target
+
+
 def test_build_plan_from_pasted_metadata_no_api_fetch():
     """ADR 0021: pasted node JSON builds the same plan as build_plan(), with
     no coalesce_client.get_node() call for the Silver node itself (only used,
@@ -314,33 +341,39 @@ def test_resolve_ref_macro():
 
 
 def test_sql_emitter_literal_text():
-    """ADR 0018 + ADR 0022: literal generated-SQL assertion, not just
-    plan-object shape -- passthrough/recomputable columns selected verbatim;
-    macro-computed and non-deterministic columns both dropped entirely (no
-    inline comment -- their exclusion is recorded in review_reasons /
-    skip_reason instead, not in the SQL text)."""
+    """ADR 0018 + ADR 0022 + ADR 0027: literal generated-SQL assertion, not
+    just plan-object shape -- passthrough/recomputable columns selected
+    verbatim (but wrapped in the blanket NULL-placeholder wrapper per ADR
+    0027); macro-computed and non-deterministic columns both dropped
+    entirely (no inline comment -- their exclusion is recorded in
+    review_reasons / skip_reason instead, not in the SQL text)."""
     plan, diff = _run_build_plan()
     query_set = emit_query_set(plan)
 
     expected_source = (
         'SELECT\n'
-        '    "FACILITIES"."ID" AS "FACILITY_ID",\n'
-        '    ROW_NUMBER() OVER (PARTITION BY "FACILITIES"."ID" ORDER BY "FACILITIES"."UPDATED_AT") AS "SYS_VERSION"\n'
+        '    COALESCE(CAST("FACILITIES"."ID" AS STRING), \'<<NULL>>\') AS "FACILITY_ID",\n'
+        '    COALESCE(CAST(ROW_NUMBER() OVER (PARTITION BY "FACILITIES"."ID" ORDER BY "FACILITIES"."UPDATED_AT") AS STRING), \'<<NULL>>\') AS "SYS_VERSION"\n'
         'FROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"'
     )
     expected_target = (
         'SELECT\n'
-        '    "FACILITY_ID",\n'
-        '    "SYS_VERSION"\n'
+        '    COALESCE(CAST("FACILITY_ID" AS STRING), \'<<NULL>>\') AS "FACILITY_ID",\n'
+        '    COALESCE(CAST("SYS_VERSION" AS STRING), \'<<NULL>>\') AS "SYS_VERSION"\n'
         'FROM "SILVER_EDGE"."CONFORMED_RRADHAKR"."INT_FACILITIES"'
     )
 
     assert query_set.main_validation_source == expected_source
     assert query_set.main_validation_target == expected_target
-    # No blanket COALESCE/CAST/NULL-placeholder wrapper anywhere (ADR 0018 2).
-    assert "COALESCE" not in query_set.main_validation_source
-    assert "<<NULL>>" not in query_set.main_validation_source
+    # Blanket COALESCE/CAST/NULL-placeholder wrapper now present everywhere (ADR 0027).
+    assert query_set.main_validation_source.count("COALESCE(CAST(") == 2
+    assert "<<NULL>>" in query_set.main_validation_source
     assert "SYS_CREATE_DATE" not in query_set.main_validation_source
+    # Row-count queries are COUNT(*) with no column to wrap -- unwrapped (ADR 0027 scope).
+    assert query_set.row_count_source == 'SELECT COUNT(*) AS count\nFROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"'
+    assert query_set.row_count_target == (
+        'SELECT COUNT(*) AS count FROM "SILVER_EDGE"."CONFORMED_RRADHAKR"."INT_FACILITIES"'
+    )
 
 
 if __name__ == "__main__":

@@ -33,9 +33,17 @@ indirection: `main.py` has module-level side effects and "isn't import-safe" --
 don't try to replace this with a direct Python import/call without confirming that
 constraint no longer holds.
 
-`Project/main.py` reads already-generated YAML configs (produced upstream by the
-generation paths -- see `webapp-yaml-generation` and `reference-filter-joins`
-skills), calls `Project/db/factory.py`'s `get_database()` to get the right connector
+`Project/main.py` reads already-generated YAML configs -- it does NOT generate
+them. This is a hard prerequisite, not incidental detail: if no YAML exists
+yet for the requested table under `Project/config/<layer>/data_validation/`,
+generate one first via the Bronze (`webapp-yaml-generation` /
+`reference-filter-joins` skills, `validation-query-yaml-generator` agent) or
+Silver (`silver-layer-coalesce-validation` skill,
+`silver-layer-coalesce-specialist` agent) flow -- don't route a "run/validate
+table X" request straight here assuming the YAML is already there. See
+CLAUDE.md's "Operational workflow order" section and
+`docs/decisions/0028-yaml-generation-is-a-prerequisite-gate-for-run-validation.md`.
+Once the YAML exists, `Project/main.py` calls `Project/db/factory.py`'s `get_database()` to get the right connector
 (`Project/db/postgres.py` / `mssqlserver.py` / `athena.py` / `snowflake.py`, all
 implementing the same two-method `Database(ABC)` interface -- `connect()` and
 `execute_query()`), and produces **row-level** output: every row gets a status of

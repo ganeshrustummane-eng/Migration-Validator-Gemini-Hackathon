@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Migration Validator · Runtime Architecture",
+    "output": "migration-validator-runtime.html",
+    "quality_profile": "showcase",
+    "viewBox": [1380, 820],
+    "repository": {
+      "url": "https://github.com/ganeshrustummane-eng/Storable-Migration-Validator",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "3b40f290735013b0cf1c8bbc4473f450e07a24ab"
+    }
+  },
+  "components": [
+    {
+      "id": "streamlit-ui",
+      "type": "frontend",
+      "label": "Generate / Run UI",
+      "pos": [35, 390],
+      "size": [145, 76],
+      "sources": [{ "path": "webapp/app.py", "label": "UI entry point" }]
+    },
+    {
+      "id": "plan-mapping",
+      "type": "backend",
+      "label": "Plan + mapping",
+      "pos": [35, 160],
+      "size": [165, 76],
+      "sources": [
+        { "path": "src/validation_pipeline.py", "label": "run_with_plan" },
+        { "path": "src/core/validation_plan.py", "label": "canonical plan" }
+      ]
+    },
+    {
+      "id": "yaml-generation",
+      "type": "backend",
+      "label": "SQL → YAML generation",
+      "pos": [230, 160],
+      "size": [175, 76],
+      "sources": [
+        { "path": "src/generated_queries/query_output_manager.py", "label": "output manager" },
+        { "path": "src/generated_queries/yaml_config_writer.py", "label": "YAML writer" }
+      ]
+    },
+    {
+      "id": "run-adapter",
+      "type": "backend",
+      "label": "Run adapter",
+      "pos": [215, 390],
+      "size": [155, 76],
+      "sources": [{ "path": "Project/runner.py", "label": "runner.py" }]
+    },
+    {
+      "id": "yaml-configs",
+      "type": "database",
+      "label": "Validation YAMLs",
+      "pos": [430, 160],
+      "size": [180, 76]
+    },
+    {
+      "id": "validation-engine",
+      "type": "backend",
+      "label": "Validation engine",
+      "pos": [400, 390],
+      "size": [165, 76],
+      "sources": [{ "path": "Project/main.py", "label": "main.py" }]
+    },
+    {
+      "id": "connector-factory",
+      "type": "backend",
+      "label": "Connector factory",
+      "pos": [600, 390],
+      "size": [155, 76],
+      "sources": [{ "path": "Project/db/factory.py", "label": "factory.py" }]
+    },
+    {
+      "id": "source-systems",
+      "type": "external",
+      "label": "Source systems",
+      "pos": [800, 210],
+      "size": [190, 82]
+    },
+    {
+      "id": "snowflake-target",
+      "type": "external",
+      "label": "Snowflake target",
+      "pos": [800, 550],
+      "size": [180, 82],
+      "sources": [{ "path": "Project/db/snowflake.py", "label": "Snowflake connector" }]
+    },
+    {
+      "id": "compare-quality",
+      "type": "backend",
+      "label": "Compare + quality checks",
+      "pos": [1010, 390],
+      "size": [175, 82],
+      "sources": [
+        { "path": "Project/utils/semantic_normalize.py", "label": "normalization" },
+        { "path": "Project/utils/row_compare.py", "label": "row comparison" }
+      ]
+    },
+    {
+      "id": "local-results",
+      "type": "database",
+      "label": "Run outputs + history",
+      "pos": [1215, 390],
+      "size": [145, 82],
+      "sources": [
+        { "path": "Project/results_store.py", "label": "history store" },
+        { "path": "Project/main.py", "label": "CSV outputs" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Operator-controlled runtime · process, configuration, local disk",
+      "wraps": ["streamlit-ui", "plan-mapping", "yaml-generation", "run-adapter", "yaml-configs", "validation-engine", "connector-factory", "compare-quality", "local-results"],
+      "pad": 16
+    }
+  ],
+  "connections": [
+    { "id": "ui-plan", "from": "streamlit-ui", "to": "plan-mapping", "fromSide": "top", "toSide": "bottom" },
+    { "id": "plan-yaml", "from": "plan-mapping", "to": "yaml-generation" },
+    { "id": "generation-files", "from": "yaml-generation", "to": "yaml-configs" },
+    { "id": "ui-run", "from": "streamlit-ui", "to": "run-adapter" },
+    { "id": "adapter-engine", "from": "run-adapter", "to": "validation-engine" },
+    { "id": "yaml-engine", "from": "yaml-configs", "to": "validation-engine", "label": "must already exist — engine reads, never generates", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
+    { "id": "engine-connectors", "from": "validation-engine", "to": "connector-factory" },
+    { "id": "factory-source", "from": "connector-factory", "to": "source-systems", "variant": "emphasis" },
+    { "id": "factory-target", "from": "connector-factory", "to": "snowflake-target", "variant": "emphasis" },
+    { "id": "source-rows", "from": "source-systems", "to": "compare-quality", "variant": "dashed" },
+    { "id": "target-rows", "from": "snowflake-target", "to": "compare-quality", "variant": "dashed" },
+    { "id": "compare-output", "from": "compare-quality", "to": "local-results" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Create YAML",
+      "items": [
+        "Standard mapping builds a plan, then renders SQL + YAML; AI handles ambiguous mappings.",
+        "JOIN, Excel Report Pack, Custom SQL, and Silver / Coalesce have variant paths."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Run validation",
+      "items": [
+        "Prerequisite gate: a YAML for the table must already exist under Project/config/<layer>/data_validation/ — this step never generates one (see ADR 0028).",
+        "Scans layer / report YAMLs; select table and validation type.",
+        "runner.py launches main.py; YAML generation does not execute the file."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Dependencies & boundaries",
+      "items": [
+        "Sources: PostgreSQL / Redshift, MSSQL, Athena; Snowflake is the target. Credentials come from env.",
+        "YAML holds executed SQL; CSV stays local; SQLite stores summaries. Coalesce / JIRA are out-of-run."
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # 0018. Silver recompute SQL must use the Coalesce-declared transform verbatim — bypass the generic Bronze normalization wrapper entirely
 
-**Status:** Accepted
+**Status:** Superseded by [0027](0027-silver-sql-null-placeholder-wrapper-reinstated.md)
 **Date:** 2026-09-24
 **Follows on from:** [0013](0013-silver-layer-validation-strategy.md), [0014](0014-coalesce-metadata-extraction-rules.md), [0015](0015-silver-v1-schema-diff-gate-and-deferred-pk-resolution.md), [0017](0017-silver-layer-specialist-agent-added.md)
 **Corrects:** the SQL-generation behavior shipped in the 0015 implementation pass

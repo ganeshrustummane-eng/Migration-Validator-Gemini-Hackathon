@@ -12,6 +12,35 @@ using `docs/decisions/TEMPLATE.md`. Check there before assuming "why is it
 built this way" is undocumented, and add a new ADR there — not just a code
 comment — when making a decision worth tracing later.
 
+## Operational workflow order — YAML generation is a prerequisite, not optional
+
+"Run a validation for table X" is a **two-phase** operation, and the phases
+are not interchangeable:
+
+1. **Generate YAML/SQL** — Bronze (`validation-query-yaml-generator` /
+   `src/validation_pipeline.py::run_with_plan()`) or Silver
+   (`silver-layer-coalesce-specialist` / `src/silver/coalesce_plan_builder.py`)
+   turns a mapping into `Project/config/<layer>/data_validation/<table>_validation.yaml`
+   (+ the matching count-validation YAML). This step does not execute anything.
+2. **Run Validation** — `Project/runner.py::start_validation()` /
+   `Project/main.py` **reads an already-generated YAML** and executes it. It
+   does not generate one, and it fails or silently no-ops if the YAML for that
+   table doesn't exist yet.
+
+The webapp's own Guide tab (`webapp/app.py`, `tab_guide`) states this order
+canonically: Connect → Exclusions → Generate YAML → Review & Approve → Run
+Validation. Treat that as ground truth for the sequence.
+
+**Rule for any agent/skill handling a "run/validate table X" request:** before
+routing to `runner.py`/`Project/main.py`, check whether a YAML config for that
+table already exists under `Project/config/<layer>/data_validation/`. If it
+doesn't, generate it first (Bronze or Silver flow, per above) — do not assume
+YAML generation already happened just because the request only mentions
+"running" or "validating". This was previously only documented as background
+trivia (see the `data-comparison-report` skill), not as an enforced rule,
+which is why agents defaulted straight to the run step. See
+`docs/decisions/0028-yaml-generation-is-a-prerequisite-gate-for-run-validation.md`.
+
 ## Repo-wide scan/grep exclusions
 
 `trash/` and `.codemie/` are generated/tool-scratch trees, not source —

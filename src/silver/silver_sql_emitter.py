@@ -1,15 +1,19 @@
 """
 Silver-only SQL emission -- ADR 0018 (verbatim Coalesce transform, no
-generic Bronze normalization wrapper) and ADR 0019 (multisource join
-concatenation).
+generic Bronze normalization *rule engine*), ADR 0019 (multisource join
+concatenation), and ADR 0027 (blanket NULL-placeholder wrapper reinstated).
 
 This bypasses src/generated_queries/sql_query_generator.py ->
-ai_sql_generator.py -> rules/base_rules.py entirely: that path wraps every
-column in COALESCE(CAST(col AS STRING), '<<NULL>>') to bridge *heterogeneous*
-source/target types (e.g. Postgres hstore vs Snowflake VARIANT). Silver is
-Snowflake-to-Snowflake -- that heterogeneity problem doesn't exist, and the
-wrapper would fight the user's actual requirement: emit the Coalesce
-metadata's own declared transform, exactly as written.
+ai_sql_generator.py -> rules/base_rules.py entirely: that path dispatches
+per source/target type pair (e.g. Postgres hstore vs Snowflake VARIANT) to
+pick a rule and wraps every column in
+COALESCE(CAST(col AS STRING), '<<NULL>>'). Silver is always
+Snowflake-to-Snowflake, so it never needs that per-type-pair dispatch -- but
+per ADR 0027, it still applies the one fixed Snowflake wrapper string
+directly (inlined below, not imported from base_rules.py) so generated
+Silver SQL is visually NULL-safe like Bronze SQL. The Coalesce metadata's
+own declared transform expression is still emitted exactly as written --
+only wrapped, never rewritten.
 
 Only entrypoint: emit_query_set(plan) -> ValidationQuerySet (the same shape
 generated_queries/sql_query_generator.py's SQLQueryGenerator produces, so
@@ -31,6 +35,15 @@ if TYPE_CHECKING:
     from core.validation_plan import CanonicalValidationPlan
 
 _REF_MACRO_RE = re.compile(r"\{\{\s*ref\(\s*'([^']*)'\s*,\s*'([^']*)'\s*\)\s*\}\}")
+
+# ADR 0027: same fixed Snowflake-target wrapper base_rules.py uses -- inlined
+# here rather than imported, since Silver never needs base_rules.py's
+# per-type-pair dialect dispatch, just this one literal string.
+NULL_PLACEHOLDER = "<<NULL>>"
+
+
+def _wrap_null(expr: str) -> str:
+    return f"COALESCE(CAST({expr} AS STRING), '{NULL_PLACEHOLDER}')"
 
 
 def resolve_ref_macro(text: str, bronze_schema: str) -> str:
@@ -64,7 +77,7 @@ def _bronze_select_lines(plan: "CanonicalValidationPlan") -> List[str]:
     """
     selected = [m for m in plan.mappings if not m.skip_validation]
     return [
-        f'{mapping.source_column} AS "{mapping.target_column}"' + ("," if i < len(selected) - 1 else "")
+        f'{_wrap_null(mapping.source_column)} AS "{mapping.target_column}"' + ("," if i < len(selected) - 1 else "")
         for i, mapping in enumerate(selected)
     ]
 
@@ -85,16 +98,21 @@ def _bronze_from_clause(plan: "CanonicalValidationPlan") -> str:
 
 def _silver_select_lines(plan: "CanonicalValidationPlan") -> List[str]:
     active = plan.active_mappings
-    return [
-        f'"{mapping.target_column}"' + ("," if i < len(active) - 1 else "")
-        for i, mapping in enumerate(active)
-    ]
+    lines = []
+    for i, mapping in enumerate(active):
+        col_ref = '"{}"'.format(mapping.target_column)
+        line = f'{_wrap_null(col_ref)} AS "{mapping.target_column}"'
+        lines.append(line + ("," if i < len(active) - 1 else ""))
+    return lines
 
 
 def emit_query_set(plan: "CanonicalValidationPlan") -> ValidationQuerySet:
     """Build the Bronze recompute SQL and the plain Silver SELECT directly
-    from *plan*, with none of the normalization/cast wrapping
-    AISQLQueryGenerator applies for Bronze (ADR 0018). Returns the same
+    from *plan*. Each selected column is wrapped in the same
+    COALESCE(CAST(col AS STRING), '<<NULL>>') placeholder AISQLQueryGenerator
+    applies for Bronze (ADR 0027) -- but without AISQLQueryGenerator's
+    per-type-pair rule dispatch, since Silver is always Snowflake-to-Snowflake
+    and only ever needs this one fixed wrapper string. Returns the same
     ValidationQuerySet shape YAMLConfigWriter.write_from_plan() already
     consumes -- no change needed there.
     """
