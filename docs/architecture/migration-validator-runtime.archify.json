@@ -2,163 +2,136 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "Migration Validator · Runtime Architecture",
+    "title": "Migration Validation · Bronze & Silver",
     "output": "migration-validator-runtime.html",
     "quality_profile": "showcase",
-    "viewBox": [1380, 820],
-    "repository": {
-      "url": "https://github.com/ganeshrustummane-eng/Storable-Migration-Validator",
-      "provider": "github",
-      "link_mode": "web",
-      "revision": "3b40f290735013b0cf1c8bbc4473f450e07a24ab"
-    }
+    "viewBox": [1700, 820]
   },
   "components": [
     {
-      "id": "streamlit-ui",
+      "id": "validator-ui",
       "type": "frontend",
-      "label": "Generate / Run UI",
-      "pos": [35, 390],
-      "size": [145, 76],
-      "sources": [{ "path": "webapp/app.py", "label": "UI entry point" }]
+      "label": "Migration Validator",
+      "pos": [45, 370],
+      "size": [180, 82]
     },
     {
-      "id": "plan-mapping",
+      "id": "bronze-planner",
       "type": "backend",
-      "label": "Plan + mapping",
-      "pos": [35, 160],
-      "size": [165, 76],
-      "sources": [
-        { "path": "src/validation_pipeline.py", "label": "run_with_plan" },
-        { "path": "src/core/validation_plan.py", "label": "canonical plan" }
-      ]
+      "label": "Bronze plan + queries",
+      "pos": [300, 205],
+      "size": [205, 82]
     },
     {
-      "id": "yaml-generation",
+      "id": "silver-planner",
       "type": "backend",
-      "label": "SQL → YAML generation",
-      "pos": [230, 160],
-      "size": [175, 76],
-      "sources": [
-        { "path": "src/generated_queries/query_output_manager.py", "label": "output manager" },
-        { "path": "src/generated_queries/yaml_config_writer.py", "label": "YAML writer" }
-      ]
+      "label": "Silver transform plan",
+      "pos": [300, 500],
+      "size": [205, 82]
     },
     {
-      "id": "run-adapter",
-      "type": "backend",
-      "label": "Run adapter",
-      "pos": [215, 390],
-      "size": [155, 76],
-      "sources": [{ "path": "Project/runner.py", "label": "runner.py" }]
-    },
-    {
-      "id": "yaml-configs",
-      "type": "database",
-      "label": "Validation YAMLs",
-      "pos": [430, 160],
+      "id": "coalesce-metadata",
+      "type": "external",
+      "label": "Coalesce metadata",
+      "pos": [45, 635],
       "size": [180, 76]
     },
     {
-      "id": "validation-engine",
-      "type": "backend",
-      "label": "Validation engine",
-      "pos": [400, 390],
-      "size": [165, 76],
-      "sources": [{ "path": "Project/main.py", "label": "main.py" }]
+      "id": "yaml-library",
+      "type": "database",
+      "label": "Bronze / Silver YAMLs",
+      "pos": [575, 370],
+      "size": [175, 82]
     },
     {
-      "id": "connector-factory",
+      "id": "run-engine",
       "type": "backend",
-      "label": "Connector factory",
-      "pos": [600, 390],
-      "size": [155, 76],
-      "sources": [{ "path": "Project/db/factory.py", "label": "factory.py" }]
+      "label": "Shared run engine",
+      "pos": [810, 370],
+      "size": [185, 82]
     },
     {
-      "id": "source-systems",
+      "id": "source-platforms",
       "type": "external",
-      "label": "Source systems",
-      "pos": [800, 210],
+      "label": "Operational sources",
+      "pos": [1050, 145],
+      "size": [185, 78]
+    },
+    {
+      "id": "bronze-data",
+      "type": "cloud",
+      "label": "Snowflake · Bronze",
+      "pos": [1050, 365],
+      "size": [185, 78]
+    },
+    {
+      "id": "silver-data",
+      "type": "cloud",
+      "label": "Snowflake · Silver",
+      "pos": [1050, 585],
+      "size": [185, 78]
+    },
+    {
+      "id": "bronze-check",
+      "type": "backend",
+      "label": "Bronze comparison",
+      "pos": [1300, 235],
       "size": [190, 82]
     },
     {
-      "id": "snowflake-target",
-      "type": "external",
-      "label": "Snowflake target",
-      "pos": [800, 550],
-      "size": [180, 82],
-      "sources": [{ "path": "Project/db/snowflake.py", "label": "Snowflake connector" }]
-    },
-    {
-      "id": "compare-quality",
+      "id": "silver-check",
       "type": "backend",
-      "label": "Compare + quality checks",
-      "pos": [1010, 390],
-      "size": [175, 82],
-      "sources": [
-        { "path": "Project/utils/semantic_normalize.py", "label": "normalization" },
-        { "path": "Project/utils/row_compare.py", "label": "row comparison" }
-      ]
+      "label": "Silver recompute + compare",
+      "pos": [1300, 515],
+      "size": [205, 82]
     },
     {
-      "id": "local-results",
+      "id": "results",
       "type": "database",
-      "label": "Run outputs + history",
-      "pos": [1215, 390],
-      "size": [145, 82],
-      "sources": [
-        { "path": "Project/results_store.py", "label": "history store" },
-        { "path": "Project/main.py", "label": "CSV outputs" }
-      ]
-    }
-  ],
-  "boundaries": [
-    {
-      "kind": "security-group",
-      "label": "Operator-controlled runtime · process, configuration, local disk",
-      "wraps": ["streamlit-ui", "plan-mapping", "yaml-generation", "run-adapter", "yaml-configs", "validation-engine", "connector-factory", "compare-quality", "local-results"],
-      "pad": 16
+      "label": "Quality results",
+      "pos": [1530, 370],
+      "size": [140, 82]
     }
   ],
   "connections": [
-    { "id": "ui-plan", "from": "streamlit-ui", "to": "plan-mapping", "fromSide": "top", "toSide": "bottom" },
-    { "id": "plan-yaml", "from": "plan-mapping", "to": "yaml-generation" },
-    { "id": "generation-files", "from": "yaml-generation", "to": "yaml-configs" },
-    { "id": "ui-run", "from": "streamlit-ui", "to": "run-adapter" },
-    { "id": "adapter-engine", "from": "run-adapter", "to": "validation-engine" },
-    { "id": "yaml-engine", "from": "yaml-configs", "to": "validation-engine", "label": "must already exist — engine reads, never generates", "variant": "dashed", "fromSide": "bottom", "toSide": "top" },
-    { "id": "engine-connectors", "from": "validation-engine", "to": "connector-factory" },
-    { "id": "factory-source", "from": "connector-factory", "to": "source-systems", "variant": "emphasis" },
-    { "id": "factory-target", "from": "connector-factory", "to": "snowflake-target", "variant": "emphasis" },
-    { "id": "source-rows", "from": "source-systems", "to": "compare-quality", "variant": "dashed" },
-    { "id": "target-rows", "from": "snowflake-target", "to": "compare-quality", "variant": "dashed" },
-    { "id": "compare-output", "from": "compare-quality", "to": "local-results" }
+    { "id": "ui-bronze", "from": "validator-ui", "to": "bronze-planner" },
+    { "id": "ui-silver", "from": "validator-ui", "to": "silver-planner" },
+    { "id": "metadata-silver", "from": "coalesce-metadata", "to": "silver-planner" },
+    { "id": "bronze-yaml", "from": "bronze-planner", "to": "yaml-library" },
+    { "id": "silver-yaml", "from": "silver-planner", "to": "yaml-library" },
+    { "id": "yaml-run", "from": "yaml-library", "to": "run-engine" },
+    { "id": "run-bronze", "from": "run-engine", "to": "bronze-check" },
+    { "id": "run-silver", "from": "run-engine", "to": "silver-check" },
+    { "id": "source-bronze", "from": "source-platforms", "to": "bronze-check", "variant": "emphasis" },
+    { "id": "bronze-compare", "from": "bronze-data", "to": "bronze-check", "variant": "emphasis" },
+    { "id": "bronze-recompute", "from": "bronze-data", "to": "silver-check", "variant": "dashed" },
+    { "id": "silver-compare", "from": "silver-data", "to": "silver-check", "variant": "emphasis" },
+    { "id": "bronze-results", "from": "bronze-check", "to": "results" },
+    { "id": "silver-results", "from": "silver-check", "to": "results" }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "Create YAML",
+      "title": "Bronze · source to warehouse",
       "items": [
-        "Standard mapping builds a plan, then renders SQL + YAML; AI handles ambiguous mappings.",
-        "JOIN, Excel Report Pack, Custom SQL, and Silver / Coalesce have variant paths."
+        "Match an operational source table to its Snowflake Bronze landing table.",
+        "Generate SQL + YAML, then compare source rows with Bronze rows."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Silver · transform verification",
+      "items": [
+        "Use Coalesce metadata to build the expected transform from Bronze data.",
+        "Recompute from Snowflake Bronze and compare with materialized Snowflake Silver; no operational-source read."
       ]
     },
     {
       "dot": "amber",
-      "title": "Run validation",
+      "title": "One framework, two strategies",
       "items": [
-        "Prerequisite gate: a YAML for the table must already exist under Project/config/<layer>/data_validation/ — this step never generates one (see ADR 0028).",
-        "Scans layer / report YAMLs; select table and validation type.",
-        "runner.py launches main.py; YAML generation does not execute the file."
-      ]
-    },
-    {
-      "dot": "rose",
-      "title": "Dependencies & boundaries",
-      "items": [
-        "Sources: PostgreSQL / Redshift, MSSQL, Athena; Snowflake is the target. Credentials come from env.",
-        "YAML holds executed SQL; CSV stays local; SQLite stores summaries. Coalesce / JIRA are out-of-run."
+        "Each path generates layer-specific YAML; the shared run engine executes the saved configuration.",
+        "Outputs summarize data-quality outcomes. Credentials, query text, and environment-specific access details are intentionally omitted."
       ]
     }
   ]

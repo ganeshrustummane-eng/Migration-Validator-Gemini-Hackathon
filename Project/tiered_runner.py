@@ -112,10 +112,10 @@ def _collect_hash_multimap(db_obj, query):
     the other) must never be classified as HASH_MATCH just because one pair of
     hashes happens to agree (see design doc §I).
 
-    Hash strings are lower-cased before storage — SHA256 hex output case
-    differs by dialect (MSSQL's HASHBYTES/CONVERT(...,2) is uppercase; the
-    others are lowercase), which would otherwise make every row look mismatched
-    for MSSQL sources even when the underlying data is identical.
+    Hash strings are lower-cased before storage — a backstop for YAML
+    generated before ADR 0036, when MSSQL/Athena hash SQL emitted UPPERCASE
+    hex. record_key is deliberately NOT lower-cased: string PKs 'ABC' and
+    'abc' are distinct rows. PK-less keys are the hash, lower-cased in SQL.
     """
     result: dict[str, list[str]] = {}
     for chunk in db_obj.execute_query_stream(query, chunksize=TIER1_FETCH_CHUNK):
@@ -570,10 +570,16 @@ def _append_result_batch(result_df, filepath, failed_filepath, wrote_header_flag
 def run_table_hybrid(table_name, validation_name, validation_config, row_hash_config,
                       source, target, environment, base_dir,
                       source_database, source_schema, target_database, target_schema,
-                      output_path, run_id, row_hash_columns=None, transformation_specs=None):
+                      output_path, run_id, row_hash_columns=None, transformation_specs=None,
+                      identity=None):
     pk_source_col = validation_config.get("pksourcecolumn")
     pk_target_col = validation_config.get("pktargetcolumn")
+    # ADR 0037: validation_plan.identity wins when present -- generated PK-less
+    # YAML carries a legacy first-column pksourcecolumn fallback, but its
+    # Tier-1 record_key is the row hash, so Tier 2 must never run on it.
     is_pk_less = not pk_source_col or not pk_target_col
+    if isinstance(identity, dict) and "source_primary_keys" in identity:
+        is_pk_less = is_pk_less or not identity["source_primary_keys"]
     if not is_pk_less and (isinstance(pk_source_col, list) or isinstance(pk_target_col, list)):
         raise NotImplementedError(
             f"hybrid_v1 does not support composite PKs yet (table={table_name}) — "

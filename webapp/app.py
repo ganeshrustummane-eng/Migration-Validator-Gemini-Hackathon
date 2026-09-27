@@ -3499,6 +3499,30 @@ with tab_execute:
     with _exec_top2:
         environment = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="exec_env")
 
+    # ── Execution mode: historical (default, unchanged) vs incremental ──────
+    # Incremental only narrows the row set via a per-table filter_column that
+    # must already be configured in that table's YAML
+    # (validation_plan.incremental.filter_column) -- never typed by hand here
+    # and never defaulted to a guessed column name. See
+    # docs/decisions/0030-progressive-decision-report-pack-incremental-sanity-streamlit.md
+    # Decision 1.
+    exec_mode = st.radio("Execution mode", ["Historical", "Incremental"], horizontal=True, key="exec_mode")
+    incremental_from_date = incremental_to_date = None
+    if exec_mode == "Incremental":
+        # ponytail: date-only precision (no time-of-day component), matching
+        # the original fork's granularity. Ceiling: a table whose real
+        # boundary needs intra-day precision can't express it here. Upgrade
+        # to a datetime input if that's ever needed -- see docs/decisions/
+        # 0031-implementation-choices-for-adr-0030-open-questions.md Q3.
+        _inc_c1, _inc_c2 = st.columns(2)
+        with _inc_c1:
+            incremental_from_date = st.date_input("From date", key="exec_incremental_from")
+        with _inc_c2:
+            incremental_to_date = st.date_input("To date", key="exec_incremental_to")
+        if incremental_from_date and incremental_to_date and incremental_from_date > incremental_to_date:
+            st.error("From date is after To date.")
+        st.caption("The date range applies to data validation only. Count validation still runs full-table in Incremental mode.")
+
     # ── Build full YAML inventory (all layers + report/) ─────────────────────
     # Each row: {stem, vtype, folder, layer, path}
     # Scans every layer so the folder-filter multiselect below does the narrowing.
@@ -3555,6 +3579,21 @@ with tab_execute:
             f"in the **Generate Single/Batch YAML** tabs."
         )
     else:
+        # ── Report pack — discovered from config/report/'s actual subdirectories,
+        # never a hardcoded list (there is no fixed enum of pack names anywhere in
+        # this codebase; see docs/decisions/0030-progressive-decision-report-pack-
+        # incremental-sanity-streamlit.md Decision 3 / Discrepancy #2). Picking one
+        # pre-scopes the inventory below to that pack's YAMLs; execution itself is
+        # unchanged — report-pack YAMLs already run through the same engine as
+        # every other row in this table.
+        _report_pack_dir = _PROJECT_DIR / "config" / "report"
+        _report_packs = sorted(p.name for p in _report_pack_dir.iterdir() if p.is_dir()) if _report_pack_dir.exists() else []
+        _pack_choice = "All"
+        if _report_packs:
+            _pack_choice = st.selectbox("Report pack", ["All"] + _report_packs, key="exec_report_pack")
+            if _pack_choice != "All":
+                _inventory = [r for r in _inventory if r["folder"] == f"report/{_pack_choice}"]
+
         # ── Filters row ──────────────────────────────────────────────────────
         _fc1, _fc2, _fc3, _fc4 = st.columns([2, 2, 2, 3])
         with _fc1:
@@ -3632,6 +3671,68 @@ with tab_execute:
                 "type will be silently skipped for the other (no matching YAML requested for it)."
             )
 
+        # ── Incremental readiness check — resolve each picked data_validation
+        # table's configured filter_column (never typed by hand), and drop
+        # any table with no validation_plan.incremental.enabled from this run
+        # rather than silently running it historical. See ADR 0030 Decision 1.
+        #
+        # CORRECTNESS NOTE (found in the ADR 0031 audit, docs/decisions/0032):
+        # removing a table from picked_data_tables does NOT stop main.py from
+        # still validating it if the same table is also in picked_count_tables
+        # -- Project/main.py's --tables argument is one flat list shared by
+        # both count_validation and data_validation (Project/main.py:173-178),
+        # so a table selected for count_validation is still passed through and
+        # will be matched against the data_validation YAML too, running it
+        # historically and unfiltered. The block below over-selects into this
+        # overlap and hard-blocks the run instead of silently proceeding.
+        incremental_filter_columns = {}
+        incremental_missing_tables = []
+        incremental_leak_tables = []
+        if exec_mode == "Incremental" and picked_data_tables:
+            import yaml as _yinc
+            _all_data_yamls = {r["stem"]: r["path"] for r in _inventory if r["vtype"] == "data_validation"}
+            for _tbl in picked_data_tables:
+                _yp = _all_data_yamls.get(_tbl)
+                _filter_col = None
+                if _yp and _yp.exists():
+                    try:
+                        _ydoc = _yinc.safe_load(_yp.read_text(encoding="utf-8")) or {}
+                        for _tentry in (_ydoc.get("tables") or {}).values():
+                            _inc = ((_tentry.get("validations") or {}).get("validation_plan") or {}).get("incremental") or {}
+                            if _inc.get("enabled") and _inc.get("filter_column"):
+                                _filter_col = _inc["filter_column"]
+                    except Exception:
+                        pass
+                if _filter_col:
+                    incremental_filter_columns[_tbl] = _filter_col
+                else:
+                    incremental_missing_tables.append(_tbl)
+
+            if incremental_filter_columns:
+                st.caption("Incremental filter column per table: " + ", ".join(
+                    f"**{t}** → `{c}`" for t, c in incremental_filter_columns.items()))
+            if incremental_missing_tables:
+                picked_data_tables = [t for t in picked_data_tables if t not in incremental_missing_tables]
+                do_data = bool(picked_data_tables)
+                selected_tables = sorted(set(picked_count_tables) | set(picked_data_tables))
+
+                incremental_leak_tables = sorted(set(incremental_missing_tables) & set(picked_count_tables))
+                if incremental_leak_tables:
+                    st.error(
+                        "Cannot run: " + ", ".join(incremental_leak_tables) + " have no "
+                        "`validation_plan.incremental.filter_column` configured AND are also checked for "
+                        "count validation. Project/main.py's --tables argument is shared by both validation "
+                        "types, so they would still run data_validation historically and unfiltered despite "
+                        "being excluded here. Uncheck them from count validation too, or configure their "
+                        "incremental filter column, before running."
+                    )
+                else:
+                    st.warning(
+                        "Incremental execution unavailable for: " + ", ".join(incremental_missing_tables) +
+                        " — no `validation_plan.incremental.filter_column` configured in the table's YAML. "
+                        "These tables are excluded from this run."
+                    )
+
         _thresh_col, _count_thresh_col = st.columns([2, 2])
         with _thresh_col:
             mismatch_threshold = st.number_input(
@@ -3660,7 +3761,9 @@ with tab_execute:
         @st.fragment
         def _run_validation_panel(selected_tables, do_count, do_data, _run_layer, environment,
                                     mismatch_threshold, count_mismatch_threshold,
-                                    picked_data_tables, picked_count_tables, _inventory):
+                                    picked_data_tables, picked_count_tables, _inventory,
+                                    exec_mode, incremental_from_date, incremental_to_date,
+                                    incremental_filter_columns, pack_choice, incremental_leak_tables):
             """Isolated as a fragment so the 1s poll loop below only re-runs this
             panel, not the whole multi-thousand-line app.py script -- see
             docs/decisions/0005-run-validation-slow-full-page-rerun-polling.md.
@@ -3670,6 +3773,10 @@ with tab_execute:
             _exec_proc_key = "exec_running_proc"
             _exec_meta_key = "exec_running_meta"
             result = None
+            _incremental_invalid = (
+                exec_mode == "Incremental"
+                and (not incremental_from_date or not incremental_to_date or incremental_from_date > incremental_to_date)
+            ) or bool(incremental_leak_tables)
 
             if st.session_state.get(_exec_proc_key) is not None:
                 _proc = st.session_state[_exec_proc_key]
@@ -3690,7 +3797,8 @@ with tab_execute:
                     st.session_state[_exec_proc_key] = None
                     st.session_state[_exec_meta_key] = None
 
-            elif st.button("🚀 Run validation", type="primary", key="exec_run", disabled=not selected_tables):
+            elif st.button("🚀 Run validation", type="primary", key="exec_run",
+                            disabled=not selected_tables or _incremental_invalid):
                 # Inject mismatch_threshold_pct into data_validation YAMLs before running
                 if mismatch_threshold > 0:
                     import yaml as _yrun
@@ -3727,8 +3835,15 @@ with tab_execute:
                         except Exception:
                             pass
 
+                # The picked date range goes to this one run only -- never written
+                # into the YAML (docs/decisions/0034-explicit-incremental-execution-
+                # mode-contract.md). Historical passes nothing, so it always runs
+                # full-table.
+                _inc_range = ((str(incremental_from_date), str(incremental_to_date))
+                              if exec_mode == "Incremental" else None)
                 try:
-                    _new_proc = start_validation(_run_layer, environment, selected_tables, do_count, do_data)
+                    _new_proc = start_validation(_run_layer, environment, selected_tables, do_count, do_data,
+                                                 incremental_range=_inc_range)
                 except Exception as exc:
                     st.error(f"Execution failed to start: {exc}")
                 else:
@@ -3767,6 +3882,11 @@ with tab_execute:
                         )
                     else:
                         st.toast(f"⚠️ {n_error_rows} table(s) errored — see log below.", icon="⚠️")
+
+                if pack_choice != "All":
+                    _pack_total = sum(len(df) for df in result["summaries"].values())
+                    _pack_passed = sum(int((df["status"] == "PASS").sum()) for df in result["summaries"].values())
+                    st.info(f"📦 Report pack **{pack_choice}**: {_pack_passed}/{_pack_total} passed")
 
                 for vtype, df in result["summaries"].items():
                     with st.container(border=True):
@@ -3825,7 +3945,9 @@ with tab_execute:
 
         _run_validation_panel(selected_tables, do_count, do_data, _run_layer, environment,
                                mismatch_threshold, count_mismatch_threshold,
-                               picked_data_tables, picked_count_tables, _inventory)
+                               picked_data_tables, picked_count_tables, _inventory,
+                               exec_mode, incremental_from_date, incremental_to_date,
+                               incremental_filter_columns, _pack_choice, incremental_leak_tables)
 
 # =============================================================================
 # TAB: History & Trends — SQLite-backed validation history (results_store.py),

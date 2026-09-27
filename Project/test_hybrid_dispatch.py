@@ -18,7 +18,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.utility import should_dispatch_hybrid  # noqa: E402
+import pytest  # noqa: E402
+
+from utils.utility import check_hybrid_incremental_conflict, should_dispatch_hybrid  # noqa: E402
 
 # Shaped exactly like a real generated YAML's "validations:" mapping for a
 # table opted into hybrid_v1 with a populated row_hash spec (see
@@ -92,6 +94,50 @@ def test_no_dispatch_at_all_when_execution_strategy_not_set():
     }
     decisions = _dispatch_decisions(table_config)
     assert decisions == {"data_validation": False, "row_hash_validation": False}
+
+
+def test_main_skips_row_hash_validation_before_placeholder_check():
+    """ADR 0035: dispatch=False is not the same as not-executed. main.py runs
+    at import, so check its loop source directly: the row_hash_validation
+    skip must exist and come before the placeholder check (i.e. before any
+    query can run for that block)."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py"), encoding="utf-8") as f:
+        src = f.read()
+    skip = src.find('if validation_name == "row_hash_validation":\n                    continue')
+    placeholder = src.find('if not source or not source_query or str(source_query).strip() in ("SELECT 1;", "SELECT 1"):')
+    assert skip != -1 and placeholder != -1
+    assert skip < placeholder
+
+
+def test_main_passes_plan_identity_to_hybrid():
+    """ADR 0037: already-generated YAML reaches the PK-less branch without
+    regeneration only if main.py hands validation_plan.identity to hybrid."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py"), encoding="utf-8") as f:
+        src = f.read()
+    call = src[src.find("tiered_runner.run_table_hybrid("):]
+    assert 'identity=_plan_block.get("identity")' in call[:call.find(")\n")]
+
+
+# docs/decisions/0032-adr-0031-implementation-audit.md finding #2 / recommendation
+# 1 option (a): hybrid_v1's Tier 1 never receives the incremental predicate, so
+# the two must not be allowed to run together silently. These four cases are
+# the exact matrix the audit's fix requires.
+
+def test_hybrid_plus_incremental_fails_fast():
+    with pytest.raises(ValueError, match="not supported with hybrid_v1"):
+        check_hybrid_incremental_conflict(use_hybrid=True, incremental_enabled=True)
+
+
+def test_hybrid_without_incremental_still_works():
+    check_hybrid_incremental_conflict(use_hybrid=True, incremental_enabled=False)  # no raise
+
+
+def test_standard_execution_with_incremental_still_works():
+    check_hybrid_incremental_conflict(use_hybrid=False, incremental_enabled=True)  # no raise
+
+
+def test_standard_historical_execution_still_works():
+    check_hybrid_incremental_conflict(use_hybrid=False, incremental_enabled=False)  # no raise
 
 
 if __name__ == "__main__":

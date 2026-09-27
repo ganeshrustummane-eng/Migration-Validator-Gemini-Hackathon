@@ -49,9 +49,21 @@ def test_row_hash_queries_algorithm_selection_matches_source_dialect():
     print("test_row_hash_queries_algorithm_selection_matches_source_dialect: OK")
 
 
+def test_mssql_and_athena_hash_expressions_emit_lowercase_hex():
+    """ADR 0036: HASHBYTES/CONVERT(...,2) and Trino to_hex() emit UPPERCASE
+    hex, Snowflake SHA2() lowercase -- a PK-less record_key is this hash and
+    is matched by exact string equality, so it must be lower-cased in SQL."""
+    mssql = SQLQueryGenerator._hash_expression("mssql", ["col_a"])
+    athena = SQLQueryGenerator._hash_expression("athena", ["col_a"])
+    assert mssql.startswith("LOWER(CONVERT(VARCHAR(64), HASHBYTES('SHA2_256'"), mssql
+    assert athena.startswith("lower(to_hex(sha256("), athena
+    print("test_mssql_and_athena_hash_expressions_emit_lowercase_hex: OK")
+
+
 if __name__ == "__main__":
     test_postgresql_hash_expression_uses_md5_not_pgcrypto_digest()
     test_redshift_hash_expression_unchanged_sha256()
     test_snowflake_hash_expression_algorithm_switch()
     test_row_hash_queries_algorithm_selection_matches_source_dialect()
+    test_mssql_and_athena_hash_expressions_emit_lowercase_hex()
     print("All sql_query_generator hash-expression checks passed.")

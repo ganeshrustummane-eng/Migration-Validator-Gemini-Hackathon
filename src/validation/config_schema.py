@@ -109,6 +109,45 @@ class DataValidationBlock(_QueryBlock):
     targetcolumn: Optional[str] = None
 
 
+class IntegrityCheckBlock(BaseModel):
+    """A source-only ``integrity_check`` block: one query against a single
+    source, FAIL if it returns any rows (orphan keys, invalid relationships,
+    domain-consistency violations, ...). No target side -- unlike
+    CountValidationBlock/DataValidationBlock, this never compares two
+    systems. See docs/decisions/0030-progressive-decision-report-pack-incremental-sanity-streamlit.md
+    Decision 2."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_table_name: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    sourcequery: str = Field(min_length=1)
+    source_database: Optional[str] = None
+    source_schema: Optional[str] = None
+    test_case: Optional[str] = None
+    summary: Optional[str] = None
+
+    @field_validator("source")
+    @classmethod
+    def _known_dialect(cls, value: str) -> str:
+        if value.strip().lower() not in SUPPORTED_SOURCES:
+            raise ValueError(
+                f"unsupported database type '{value}'. "
+                f"Expected one of: {', '.join(sorted(SUPPORTED_SOURCES))}"
+            )
+        return value
+
+    @field_validator("sourcequery")
+    @classmethod
+    def _looks_like_select(cls, value: str) -> str:
+        if not _SELECT_RE.match(value):
+            raise ValueError(
+                "query must be a SELECT statement (found: "
+                f"{value.strip().splitlines()[0][:60] if value.strip() else 'empty'!r})"
+            )
+        return value
+
+
 class ValidationPlanBlock(BaseModel):
     """The ``validation_plan`` sibling block — plan metadata, not a validation
     itself (see should_dispatch_hybrid() in Project/utils/utility.py). Only
@@ -126,6 +165,7 @@ class TableValidations(BaseModel):
     count_validation: Optional[CountValidationBlock] = None
     data_validation: Optional[DataValidationBlock] = None
     validation_plan: Optional[ValidationPlanBlock] = None
+    integrity_check: Optional[IntegrityCheckBlock] = None
 
 
 class TableEntry(BaseModel):

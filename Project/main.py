@@ -15,10 +15,12 @@ from pathlib import Path
 from db.factory import get_database
 from utils.utility import (generate_runid,get_config_output_paths,create_summary,get_logger,add_file_handler,
                             count_validation_match,row_hash_fallback_looks_like_column_drift,
-                            should_dispatch_hybrid)
+                            should_dispatch_hybrid,check_hybrid_incremental_conflict,
+                            read_incremental_range,incremental_filter_column)
 from utils.semantic_normalize import canonicalize_frames
-from utils.quality_checks import append_validation_audit, run_quality_checks, validate_expected_grain
+from utils.quality_checks import append_validation_audit, run_integrity_check, run_quality_checks, validate_expected_grain
 from utils.row_compare import compare_indexed_frames
+from utils.incremental_filter import apply_incremental_predicate
 from datetime import datetime
 
 
@@ -140,6 +142,19 @@ _warned_stale_exclusions = set()  # (yamlfile, exclusions_file) pairs already wa
 # the DB side can take; override with VALIDATOR_MAX_TABLE_WORKERS if needed.
 MAX_TABLE_WORKERS = int(os.environ.get("VALIDATOR_MAX_TABLE_WORKERS", "4"))
 
+# Run mode (docs/decisions/0034-explicit-incremental-execution-mode-contract.md):
+# the date range comes only from this process's environment, set by
+# runner.start_validation() from the Streamlit date pickers -- never from the
+# YAML. Neither set = Historical. A half-set/invalid range stops the run
+# before any table executes.
+try:
+    INCREMENTAL_RANGE = read_incremental_range(os.environ)
+except ValueError as e:
+    logger.error("Invalid incremental run range, nothing was executed: %s", e)
+    sys.exit(2)
+run_incremental = INCREMENTAL_RANGE is not None
+logger.info("Execution mode: %s", f"Incremental {INCREMENTAL_RANGE[0]}..{INCREMENTAL_RANGE[1]}" if run_incremental else "Historical")
+
 # Guards mutation of the module-level counters/sets below (failure_count,
 # system_error, processed_tables, _warned_stale_exclusions) now that multiple
 # tables can be validated concurrently on worker threads.
@@ -200,6 +215,12 @@ for validation in validation_dirs:
             local_system_error = False
             for validation_name, validation_config in table_config["validations"].items():
                 logger.debug("Validation configuration: %s", validation_name)
+                # row_hash_validation is the hybrid_v1 Tier-1 helper input (read
+                # directly via _row_hash_block below), not an independent
+                # validation -- never execute it on its own. See
+                # docs/decisions/0035-row-hash-validation-is-helper-block-never-standalone.md.
+                if validation_name == "row_hash_validation":
+                    continue
                 source = validation_config.get("source")
                 source_query = validation_config.get("sourcequery")
                 target = validation_config.get("target")
@@ -223,6 +244,63 @@ for validation in validation_dirs:
                         "Skipping validation_block=%s table=%s — placeholder/metadata block.",
                         validation_name, table_name,
                     )
+                    continue
+
+                # Source-only integrity/orphan-key check -- no target, so it
+                # never enters the source/target comparison path below. See
+                # docs/decisions/0030-progressive-decision-report-pack-incremental-sanity-streamlit.md
+                # Decision 2.
+                if validation_name == "integrity_check":
+                    batch_start_time = datetime.now()
+                    try:
+                        logger.info("Executing integrity check for table %s", table_name)
+                        obj = get_database(source, BASE_DIR, environment,
+                                           override_database=source_database,
+                                           override_schema=source_schema)
+                        source_df = obj.execute_query(source_query)
+                        integrity_failures = run_integrity_check(source_df, validation_config)
+                        row_count = integrity_failures[0]["row_count"] if integrity_failures else 0
+                        status = "FAIL" if integrity_failures else "PASS"
+                        if status == "FAIL":
+                            local_failure_count += 1
+                            logger.warning("Integrity check failed for table=%s: %s violating rows", table_name, row_count)
+                        else:
+                            logger.info("Integrity check passed for table=%s", table_name)
+
+                        output_file_path = ""
+                        if integrity_failures:
+                            output_file_path = os.path.join(output_path, f"{table_name}_{validation_name}_violations_{run_id}.csv")
+                            source_df.to_csv(output_file_path, index=False)
+
+                        append_validation_audit(
+                            Path(output_path) / "validation_audit.jsonl",
+                            {
+                                "run_id": run_id, "table": table_name, "validation": validation_name,
+                                "source": source, "source_query": source_query,
+                                "row_count": row_count, "status": status,
+                                "quality_failures": integrity_failures,
+                            },
+                        )
+                        batch_end_time = datetime.now()
+                        diff_batch = batch_end_time - batch_start_time
+                        create_summary(
+                            run_at, run_id, validation_name, source_table_name, source, None, None,
+                            row_count, None, output_file_path, output_path, status,
+                            batch_start_time.strftime("%H:%M:%S"), batch_end_time.strftime("%H:%M:%S"),
+                            time.strftime("%H:%M:%S", time.gmtime(diff_batch.total_seconds())),
+                        )
+                    except (pyodbc.Error, psycopg2.Error):
+                        logger.error("Database/network error running integrity check for table=%s", table_name, exc_info=True)
+                        local_failure_count += 1
+                        local_system_error = True
+                        _write_error_summary(table_name, validation_name, source_table_name, source,
+                                             None, None, None, None, output_path, batch_start_time)
+                    except Exception:
+                        logger.error("Unexpected error running integrity check for table=%s", table_name, exc_info=True)
+                        local_failure_count += 1
+                        local_system_error = True
+                        _write_error_summary(table_name, validation_name, source_table_name, source,
+                                             None, None, None, None, output_path, batch_start_time)
                     continue
 
                 try:
@@ -273,6 +351,31 @@ for validation in validation_dirs:
                     _row_hash_columns = _row_hash_spec.get("columns") or []
                     use_hybrid = should_dispatch_hybrid(validation_name, _plan_block, _row_hash_block)
 
+                    # Incremental filtering (docs/decisions/0034-explicit-incremental-
+                    # execution-mode-contract.md): the YAML's incremental.enabled +
+                    # filter_column only say the table CAN run incrementally; whether this
+                    # run filters comes from run_incremental (process env). Any leftover
+                    # YAML from_date/to_date keys are ignored. An Incremental run of an
+                    # unconfigured data_validation block raises here -- caught by this
+                    # block's own try/except below as an ERROR row, never silently
+                    # falls back to historical.
+                    _filter_column = incremental_filter_column(validation_name, _plan_block, run_incremental)
+                    apply_incremental = bool(_filter_column)
+
+                    # Fail-fast guard (see docs/decisions/0032-adr-0031-implementation-audit.md
+                    # finding #2 / recommendation 1, option (a)): raises instead of silently
+                    # running the full, unfiltered hybrid scan -- caught by this block's own
+                    # try/except below as an ERROR row, same as every other pre-execution
+                    # config problem. See check_hybrid_incremental_conflict()'s docstring for
+                    # why hybrid_v1 + incremental can't just work together today.
+                    # Table-scoped: the table's hybrid status (from data_validation), not
+                    # this block's use_hybrid, so row_hash_validation and other siblings of
+                    # a hybrid table are blocked too instead of running filtered (partial run).
+                    check_hybrid_incremental_conflict(
+                        should_dispatch_hybrid("data_validation", _plan_block, _row_hash_block),
+                        apply_incremental,
+                    )
+
                     if use_hybrid:
                         import tiered_runner
                         quality_failures = []
@@ -295,6 +398,7 @@ for validation in validation_dirs:
                             target_schema=target_schema,
                             output_path=output_path,
                             run_id=run_id,
+                            identity=_plan_block.get("identity"),
                         )
                         source_rows = hybrid_result["source_rows"]
                         target_rows = hybrid_result["target_rows"]
@@ -302,6 +406,13 @@ for validation in validation_dirs:
                         grain_failures = hybrid_result.get("grain_failures", [])
                         quality_failures = hybrid_result.get("quality_failures", [])
                     else:
+                        if apply_incremental:
+                            _from_date, _to_date = INCREMENTAL_RANGE
+                            source_query = apply_incremental_predicate(source_query, _filter_column, _from_date, _to_date)
+                            target_query = apply_incremental_predicate(target_query, _filter_column, _from_date, _to_date)
+                            logger.info("Incremental filter applied for table %s: %s between %s and %s",
+                                        table_name, _filter_column, _from_date, _to_date)
+
                         #source
                         logger.info("Executing source query for table %s", table_name)
                         logger.debug("Source query: %s", source_query)

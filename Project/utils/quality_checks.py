@@ -176,6 +176,25 @@ def validate_expected_grain(
     return failures
 
 
+def run_integrity_check(source_df: pd.DataFrame, config: dict) -> list[dict[str, Any]]:
+    """Source-only check: PASS (empty list) if source_df has zero rows,
+    FAIL (one failure dict) otherwise. Used for orphan-key/invalid-relationship
+    queries where there is no target to compare against -- see
+    Project/main.py's integrity_check branch and
+    docs/decisions/0030-progressive-decision-report-pack-incremental-sanity-streamlit.md
+    Decision 2. Same failure-dict shape as run_quality_checks() so downstream
+    reporting doesn't need a third format."""
+    row_count = len(source_df)
+    if row_count == 0:
+        return []
+    return [{
+        "check": "integrity",
+        "test_case": config.get("test_case", ""),
+        "summary": config.get("summary", ""),
+        "row_count": row_count,
+    }]
+
+
 def append_validation_audit(path: Path, record: dict[str, Any]) -> None:
     """Append one JSON record. Audit failure must not hide validation result."""
     try:

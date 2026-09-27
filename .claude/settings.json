@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python -m pytest Project/test_tiered_runner.py Project/test_hybrid_dispatch.py -q 2>&1)",
+      "PowerShell(python src/generated_queries/test_sql_query_generator.py 2>&1)",
+      "PowerShell(Remove-Item \"docs\\\\decisions\\\\0037-pk-less-fallback-pksourcecolumn-breaks-hybrid-tier2.md\" -Confirm:$false)",
+      "PowerShell(python -m pytest Project/test_tiered_runner.py Project/test_hybrid_dispatch.py Project/test_incremental_mode.py -q 2>&1)",
+      "PowerShell(python -m pytest src/generated_queries/test_sql_query_generator.py -q 2>&1)",
+      "PowerShell(python -m pytest src/validation/test_execution_strategy.py -q 2>&1)",
+      "PowerShell(python -m py_compile Project/main.py Project/tiered_runner.py Project/test_tiered_runner.py Project/test_hybrid_dispatch.py; \"py_compile exit: $LASTEXITCODE\"; python -m pytest Project/test_tiered_runner.py -q -k \"pk_less or identity or composite\" 2>&1 | Select-Object -Last 2; python -m pytest Project -q 2>&1 | Select-Object -Last 15; Push-Location src; python -m pytest -q 2>&1 | Select-Object -Last 15; Pop-Location)"
+    ]
+  }
+}

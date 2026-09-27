@@ -19,6 +19,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
 
 import tiered_runner  # noqa: E402
 from utils.quality_checks import validate_expected_grain  # noqa: E402
@@ -270,6 +271,101 @@ def test_pk_less_duplicate_count_mismatch_refuses_rather_than_guessing():
         except RuntimeError as exc:
             assert "PK-less" in str(exc) or "row-hash" in str(exc).lower() or "primary key" in str(exc).lower()
     print("test_pk_less_duplicate_count_mismatch_refuses_rather_than_guessing: OK")
+
+
+def _run_generated_pk_less(src_hash_rows, tgt_hash_rows, identity, expect_tier2=False):
+    """ADR 0037: generated PK-less YAML shape -- legacy first-column
+    pksourcecolumn fallback, record_key = the row hash. Spies on Tier 2
+    (_fetch_batch) and asserts whether it ran, even when the run raises."""
+    with patch("tiered_runner._fetch_batch", wraps=tiered_runner._fetch_batch) as tier2:
+        try:
+            return _run_generated_pk_less_inner(src_hash_rows, tgt_hash_rows, identity)
+        finally:
+            assert tier2.called is expect_tier2, f"Tier 2 called={tier2.called}"
+
+
+def _run_generated_pk_less_inner(src_hash_rows, tgt_hash_rows, identity):
+    src_db = _FakeDB(pd.DataFrame({"a": [1]}), src_hash_rows)
+    tgt_db = _FakeDB(pd.DataFrame({"a": [1]}), tgt_hash_rows)
+    validation_config = {
+        "pksourcecolumn": "a_normalized", "pktargetcolumn": "a_normalized",
+        "sourcequery": "SELECT a FROM source_t", "targetquery": "SELECT a FROM target_t",
+    }
+    row_hash_config = {
+        "sourcequery": "SELECT h AS record_key, h AS row_hash FROM source_t",
+        "targetquery": "SELECT h AS record_key, h AS row_hash FROM target_t",
+    }
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp, \
+         patch("tiered_runner.get_database", side_effect=[src_db, tgt_db]):
+        return tiered_runner.run_table_hybrid(
+            table_name="fixture_table", validation_name="data_validation",
+            validation_config=validation_config, row_hash_config=row_hash_config,
+            source="postgresql", target="snowflake", environment="local", base_dir=".",
+            source_database="", source_schema="", target_database="", target_schema="",
+            output_path=tmp, run_id="test", identity=identity,
+        )
+
+
+_PK_LESS_IDENTITY = {"type": "primary_key", "source_primary_keys": [], "target_primary_keys": []}
+
+
+def test_generated_pk_less_identical_data_passes():
+    rows = [("h1", "h1"), ("h2", "h2")]
+    assert _run_generated_pk_less(rows, rows, _PK_LESS_IDENTITY)["is_match"] is True
+
+
+def test_generated_pk_less_difference_refuses_not_keyerror():
+    """Before ADR 0037 this hit Tier 2 on the fallback column -> KeyError."""
+    for src, tgt in (
+        ([("h1", "h1"), ("h2", "h2")], [("h1", "h1"), ("h3", "h3")]),  # one difference
+        ([("h1", "h1"), ("h1", "h1")], [("h1", "h1")]),                # duplicate count 2 vs 1
+    ):
+        with pytest.raises(RuntimeError, match="PK-less"):
+            _run_generated_pk_less(src, tgt, _PK_LESS_IDENTITY)
+
+
+def test_hand_written_yaml_without_identity_keeps_old_pk_rule():
+    """No identity block -> pksourcecolumn still decides (not PK-less), so a
+    difference goes to Tier 2 exactly as before, never the PK-less refusal."""
+    with pytest.raises(Exception) as exc_info:
+        _run_generated_pk_less([("h1", "h1")], [("h2", "h2")], identity=None, expect_tier2=True)
+    assert "PK-less" not in str(exc_info.value)
+
+
+def test_pk_based_hybrid_with_identity_unchanged():
+    """identity with a real PK -> same Tier-2 row-level result as the oracle."""
+    source_full, target_full, src_db, tgt_db = _build_fixture()
+    oracle = _oracle_result(source_full, target_full).set_index("row_key")["status"].to_dict()
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp, \
+         patch("tiered_runner.get_database", side_effect=[src_db, tgt_db]):
+        tiered_runner.run_table_hybrid(
+            table_name="fixture_table", validation_name="data_validation",
+            validation_config={"pksourcecolumn": "id", "pktargetcolumn": "id",
+                               "sourcequery": "SELECT id, name FROM source_t",
+                               "targetquery": "SELECT id, name FROM target_t"},
+            row_hash_config={"sourcequery": "SELECT id AS record_key, h AS row_hash FROM source_t",
+                             "targetquery": "SELECT id AS record_key, h AS row_hash FROM target_t"},
+            source="postgresql", target="snowflake", environment="local", base_dir=".",
+            source_database="", source_schema="", target_database="", target_schema="",
+            output_path=tmp, run_id="test",
+            identity={"source_primary_keys": ["id"], "target_primary_keys": ["id"]},
+        )
+        result_csv = pd.read_csv(os.path.join(tmp, "fixture_table_data_validation_result_test.csv"))
+    assert dict(zip(result_csv["row_key"].astype(str), result_csv["status"])) == oracle
+
+
+def test_composite_pk_with_identity_still_rejected():
+    with pytest.raises(NotImplementedError, match="composite"):
+        tiered_runner.run_table_hybrid(
+            table_name="t", validation_name="data_validation",
+            validation_config={"pksourcecolumn": ["a", "b"], "pktargetcolumn": ["a", "b"]},
+            row_hash_config={}, source="postgresql", target="snowflake",
+            environment="local", base_dir=".", source_database="", source_schema="",
+            target_database="", target_schema="", output_path=".", run_id="test",
+            identity={"source_primary_keys": ["a", "b"], "target_primary_keys": ["a", "b"]},
+        )
 
 
 def test_incomplete_row_hash_coverage_refuses_rather_than_silently_passing():
@@ -1071,6 +1167,11 @@ if __name__ == "__main__":
     test_duplicate_key_count_mismatch_produces_fail_not_silent_pass()
     test_pk_less_duplicate_rows_matching_count_passes()
     test_pk_less_duplicate_count_mismatch_refuses_rather_than_guessing()
+    test_generated_pk_less_identical_data_passes()
+    test_generated_pk_less_difference_refuses_not_keyerror()
+    test_hand_written_yaml_without_identity_keeps_old_pk_rule()
+    test_pk_based_hybrid_with_identity_unchanged()
+    test_composite_pk_with_identity_still_rejected()
     test_incomplete_row_hash_coverage_refuses_rather_than_silently_passing()
     test_hash_match_bucket_is_batched_not_built_as_one_unbounded_frame()
     test_transformation_specs_propagate_through_tier2_batches()

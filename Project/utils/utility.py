@@ -54,6 +54,68 @@ def should_dispatch_hybrid(validation_name: str, plan_block: dict, row_hash_bloc
     return True
 
 
+INCREMENTAL_FROM_ENV = "VALIDATOR_INCREMENTAL_FROM_DATE"
+INCREMENTAL_TO_ENV = "VALIDATOR_INCREMENTAL_TO_DATE"
+
+
+def read_incremental_range(env) -> "tuple[str, str] | None":
+    """This run's mode, per docs/decisions/0034-explicit-incremental-execution-
+    mode-contract.md: neither variable set -> None (Historical); both set ->
+    (from_date, to_date) (Incremental); only one set, a non-ISO date, or
+    from > to -> ValueError. Dates are parsed with date.fromisoformat so
+    nothing but a plain YYYY-MM-DD ever reaches the SQL predicate."""
+    from datetime import date
+    from_raw, to_raw = env.get(INCREMENTAL_FROM_ENV), env.get(INCREMENTAL_TO_ENV)
+    if not from_raw and not to_raw:
+        return None
+    if not from_raw or not to_raw:
+        raise ValueError(f"{INCREMENTAL_FROM_ENV} and {INCREMENTAL_TO_ENV} must be set together "
+                         f"(got from={from_raw!r}, to={to_raw!r})")
+    from_date, to_date = date.fromisoformat(from_raw), date.fromisoformat(to_raw)
+    if from_date > to_date:
+        raise ValueError(f"from_date ({from_date}) is after to_date ({to_date})")
+    return str(from_date), str(to_date)
+
+
+def incremental_filter_column(validation_name: str, plan_block: dict, run_incremental: bool):
+    """The filter column to apply for this block on this run, or None.
+
+    `enabled` + `filter_column` in the YAML are capability only (ADR 0034
+    Decision 1) -- Historical runs never filter, whatever the YAML says. In an
+    Incremental run, a data_validation block whose table isn't configured
+    raises (-> ERROR row) instead of silently running historically; other
+    sibling blocks just run unfiltered."""
+    if not run_incremental:
+        return None
+    inc = (plan_block or {}).get("incremental") or {}
+    if inc.get("enabled") and inc.get("filter_column"):
+        return inc["filter_column"]
+    if validation_name == "data_validation":
+        raise ValueError(
+            "Incremental run requested, but this table has no "
+            "validation_plan.incremental.enabled + filter_column configured."
+        )
+    return None
+
+
+def check_hybrid_incremental_conflict(use_hybrid: bool, incremental_enabled: bool) -> None:
+    """Raise if a hybrid_v1 table would have an incremental predicate applied
+    on THIS run (`incremental_enabled` = "incremental predicate would be
+    applied this run", not the static YAML capability flag -- see ADR 0034;
+    a Historical run of an incremental-capable hybrid table runs hybrid
+    normally). tiered_runner.run_table_hybrid()'s Tier 1 reads
+    row_hash_config["sourcequery"]/["targetquery"] directly and never
+    receives the incremental predicate, so running both together would
+    silently execute the full, unfiltered hybrid scan instead of the
+    date-scoped one the config/UI claims -- see
+    docs/decisions/0032-adr-0031-implementation-audit.md finding #2."""
+    if use_hybrid and incremental_enabled:
+        raise ValueError(
+            "Incremental validation is currently not supported with hybrid_v1. "
+            "Disable incremental mode or use the standard execution strategy."
+        )
+
+
 def row_hash_fallback_looks_like_column_drift(n_source_only: int, n_target_only: int, total_rows: int) -> bool:
     """Heuristic for the row_hash PK fallback: when no primary key is configured,
     the row's identity IS the hash of every common column, so one un-normalized

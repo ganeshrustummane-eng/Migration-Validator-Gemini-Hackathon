@@ -374,10 +374,13 @@ class SQLQueryGenerator:
                 f"COALESCE(CAST({value} AS VARCHAR(MAX)), '{SQLQueryGenerator.NULL_PLACEHOLDER}')"
                 for value in values
             )
-            return f"CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', {joined}), 2)"
+            # LOWER(): CONVERT(..., 2) / to_hex() emit UPPERCASE hex, Snowflake
+            # emits lowercase -- a PK-less record_key is this hash, and Tier 1
+            # matches keys by exact string equality (ADR 0036).
+            return f"LOWER(CONVERT(VARCHAR(64), HASHBYTES('SHA2_256', {joined}), 2))"
         if dialect in {"athena", "trino", "presto"}:
             joined = "concat_ws('|', " + ", ".join(values) + ")"
-            return f"to_hex(sha256(to_utf8({joined})))"
+            return f"lower(to_hex(sha256(to_utf8({joined}))))"
         if dialect == "snowflake":
             joined = "CONCAT_WS('|', " + ", ".join(values) + ")"
             # algorithm="md5" only when this table's source is postgresql --

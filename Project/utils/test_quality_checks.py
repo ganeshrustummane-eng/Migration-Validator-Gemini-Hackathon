@@ -4,6 +4,7 @@ import pandas as pd
 
 from quality_checks import (
     append_validation_audit,
+    run_integrity_check,
     run_quality_checks,
     validate_expected_grain,
 )
@@ -30,6 +31,19 @@ def test_expected_grain_rejects_duplicate_join_rows():
     )
     assert failures[0]["check"] == "expected_grain"
     assert failures[0]["side"] == "source"
+
+
+def test_integrity_check_passes_on_zero_rows():
+    empty = pd.DataFrame({"id": []})
+    assert run_integrity_check(empty, {"test_case": "orphan_customer_id"}) == []
+
+
+def test_integrity_check_fails_on_any_violation_rows():
+    violations = pd.DataFrame({"id": [1, 2]})
+    failures = run_integrity_check(violations, {"test_case": "orphan_customer_id", "summary": "orphans"})
+    assert failures[0]["check"] == "integrity"
+    assert failures[0]["row_count"] == 2
+    assert failures[0]["test_case"] == "orphan_customer_id"
 
 
 def test_audit_appends_jsonl(tmp_path: Path):

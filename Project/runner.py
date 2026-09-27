@@ -69,10 +69,20 @@ def list_configured_tables(layer: str) -> dict:
     return {"count_validation": count_tables, "data_validation": data_tables}
 
 
+_INCREMENTAL_ENV_VARS = ("VALIDATOR_INCREMENTAL_FROM_DATE", "VALIDATOR_INCREMENTAL_TO_DATE")
+
+
 def start_validation(layer: str, environment: str, tables: list,
-                      count_validation: bool, data_validation: bool) -> RunningValidation:
+                      count_validation: bool, data_validation: bool,
+                      incremental_range: "tuple[str, str] | None" = None) -> RunningValidation:
     """Launches `python main.py --layer_type ... --tables ... --environment ...`
     in Project/ and returns immediately with a handle to the live process.
+
+    `incremental_range=(from_date, to_date)` (from the Streamlit date pickers)
+    makes this one run Incremental; None makes it Historical. Handed to the
+    child process only -- the parent's environment is never mutated, and in
+    Historical mode any inherited values are stripped so they can't leak in.
+    See docs/decisions/0034-explicit-incremental-execution-mode-contract.md.
 
     stdout/stderr are redirected to temp files, NOT subprocess.PIPE -- see
     RunningValidation's docstring for why a pipe here causes a permanent hang.
@@ -95,11 +105,17 @@ def start_validation(layer: str, environment: str, tables: list,
         "--data_validation", "yes" if data_validation else "no",
         "--environment", environment,
     ]
+    child_env = os.environ.copy()
+    for var in _INCREMENTAL_ENV_VARS:
+        child_env.pop(var, None)
+    if incremental_range is not None:
+        child_env.update(zip(_INCREMENTAL_ENV_VARS, map(str, incremental_range)))
+
     stdout_fd, stdout_path = tempfile.mkstemp(prefix="validation_stdout_", suffix=".log")
     stderr_fd, stderr_path = tempfile.mkstemp(prefix="validation_stderr_", suffix=".log")
     with os.fdopen(stdout_fd, "w") as stdout_f, os.fdopen(stderr_fd, "w") as stderr_f:
         proc = subprocess.Popen(
-            args, cwd=str(PROJECT_DIR), stdout=stdout_f, stderr=stderr_f, text=True,
+            args, cwd=str(PROJECT_DIR), stdout=stdout_f, stderr=stderr_f, text=True, env=child_env,
         )
     return RunningValidation(proc=proc, stdout_path=Path(stdout_path), stderr_path=Path(stderr_path))
 
@@ -161,6 +177,14 @@ def collect_validation_result(running: RunningValidation, layer: str, environmen
         summary_path = run_dir / f"{vtype}_{run_id}" / f"{vtype}_summary.csv"
         if summary_path.exists():
             result["summaries"][vtype] = pd.read_csv(summary_path)
+
+    # integrity_check writes into whichever validation-dir folder its table's
+    # YAML lives under (count and/or data), not its own subdirectory -- combine
+    # both if present. Only this one file name is collected (ADR 0034 D2).
+    integrity_paths = sorted(run_dir.glob("*/integrity_check_summary.csv"))
+    if integrity_paths:
+        result["summaries"]["integrity_check"] = pd.concat(
+            [pd.read_csv(p) for p in integrity_paths], ignore_index=True)
 
     result["diff_files"] = sorted(Path(p) for p in glob.glob(str(run_dir / "**" / "*_result_*.csv"), recursive=True))
     result["failed_files"] = sorted(Path(p) for p in glob.glob(str(run_dir / "**" / "*_failed_*.csv"), recursive=True))
