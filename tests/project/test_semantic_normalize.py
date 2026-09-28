@@ -1,13 +1,13 @@
 """Tests for the JSON/JSONB/HStore canonicalizer.
 
-Run:  python -m pytest Project/utils/test_semantic_normalize.py -q
-  or: python Project/utils/test_semantic_normalize.py
+Run:  python -m pytest tests/project/test_semantic_normalize.py -q
+  or: python tests/project/test_semantic_normalize.py
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project"))
 
 from utils.semantic_normalize import (  # noqa: E402
     canonicalize_value,

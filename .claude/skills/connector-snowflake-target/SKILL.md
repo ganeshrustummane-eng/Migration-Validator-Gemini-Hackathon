@@ -25,12 +25,10 @@ These were verified as real accepted kwargs against the installed
 `snowflake.connector.connection`) before implementing -- don't assume parameter
 names from older docs without re-checking against whatever version is installed.
 Before this, login and query execution could both hang forever; see
-`Project/db/test_snowflake.py` for the mocked checks (note: that test file must
-strip its own script directory from `sys.path` before importing, since
-`Project/db/snowflake.py`'s filename shadows the real top-level `snowflake`
-package it needs to import -- a `python Project/db/test_snowflake.py`-shaped
-gotcha, not a production issue, since `Project/main.py` never runs with
-`Project/db/` as its own script directory).
+`tests/project/test_snowflake.py` for the mocked checks (note: never put
+`Project/db/` itself on `sys.path` -- `Project/db/snowflake.py`'s filename
+shadows the real top-level `snowflake` package it needs to import. Tests
+living in `tests/` avoid this by construction; see ADR 0040).
 
 `execute_query()` uses
 `with self.connect() as conn: with conn.cursor() as cs:` context managers (unlike

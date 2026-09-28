@@ -8,13 +8,13 @@ before exiting, and a PIPE with nobody draining it deadlocks the child on
 write() forever. This proves that exact mechanism against a real subprocess
 that writes well past that threshold, using runner's actual functions.
 
-Run: python Project/test_runner_subprocess.py
+Run: python tests/project/test_runner_subprocess.py
 """
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Project"))
 import runner
 
 

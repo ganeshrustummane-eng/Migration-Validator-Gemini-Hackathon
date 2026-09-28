@@ -43,3 +43,5 @@ flake8
 black
 pylint
 openpyxl
+
+snowflake-connector-python[secure-local-storage]

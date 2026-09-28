@@ -48,6 +48,23 @@ exclude them from full-repo greps and scans (they're large and irrelevant to
 migration logic, and matches from them are noise). Neither is currently in
 `.gitignore`; don't assume gitignore alone keeps them out of a scan.
 
+## Tests live only in `tests/`
+
+Every test file goes under `tests/`, never next to source code in `Project/`,
+`src/` or `webapp/`. That keeps the product tree clean for the quality team
+and for leadership demos.
+
+- `tests/project/`: tests for `Project/` (the engine, `db/`, `utils/`).
+- `tests/src/`: tests for `src/` (YAML/SQL generation, Silver, config schema).
+- Run all of them from the repo root: `python -m pytest tests -q`.
+- Each folder's `conftest.py` sets up `sys.path`. Keep the two folders
+  separate, because `src/utils` and `Project/utils` would shadow each other.
+- Test basenames must be unique across all of `tests/`.
+- Older ADRs cite the old paths (`Project/**/test_x.py`, `src/**/test_x.py`).
+  Read them as `tests/<tree>/test_x.py`.
+
+See `docs/decisions/0040-all-tests-live-in-tests-folder.md`.
+
 ## The problem
 
 Storable is migrating data from several operational systems into Snowflake.

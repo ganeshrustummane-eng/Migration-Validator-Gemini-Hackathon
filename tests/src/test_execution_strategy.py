@@ -4,17 +4,17 @@ generated YAML. See docs/decisions/0010-hybrid-v1-tiered-runner-audit-no-front-d
 and 0011-hybrid-v1-front-door.md.
 
 This does NOT test Project/tiered_runner.py's runtime dispatch (that's
-Project/test_hybrid_dispatch.py, unchanged) -- it tests the generation-time
+tests/project/test_hybrid_dispatch.py) -- it tests the generation-time
 plan/schema layer that produces the execution_strategy key in the first place.
 
-Run:  python -m pytest src/validation/test_execution_strategy.py -q
-  or: python src/validation/test_execution_strategy.py
+Run:  python -m pytest tests/src/test_execution_strategy.py -q
+  or: python tests/src/test_execution_strategy.py
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
 from core.validation_plan import CanonicalValidationPlan, RowHashSpec  # noqa: E402
 from validation.plan_validator import PlanValidator  # noqa: E402

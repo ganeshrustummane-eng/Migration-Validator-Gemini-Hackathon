@@ -2,7 +2,7 @@
 IntegrityCheckBlock (source-only, no target side) and its wiring into
 TableValidations.
 
-Run: python -m pytest validation/test_config_schema.py -q   (from src/)
+Run: python -m pytest tests/src/test_config_schema.py -q
 """
 
 import pytest

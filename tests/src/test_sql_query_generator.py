@@ -3,14 +3,14 @@ PostgreSQL formula (docs/large-table-scalable-architecture): Tier-1
 classification compares raw hash *strings* across engines directly, so the
 source and target sides must always agree on algorithm.
 
-Run:  python -m pytest src/generated_queries/test_sql_query_generator.py -q
-  or: python src/generated_queries/test_sql_query_generator.py
+Run:  python -m pytest tests/src/test_sql_query_generator.py -q
+  or: python tests/src/test_sql_query_generator.py
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))
 
 from generated_queries.sql_query_generator import SQLQueryGenerator  # noqa: E402
 

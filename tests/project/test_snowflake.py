@@ -1,17 +1,11 @@
 """Self-check for the Snowflake connector's timeout hardening.
-Run: python Project/db/test_snowflake.py
+Run: python tests/project/test_snowflake.py
 """
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# This script's own directory (Project/db) is auto-added to sys.path[0] by
-# Python and contains snowflake.py, which shadows the real top-level
-# `snowflake` package that db/snowflake.py itself needs to import. Strip it
-# before adding Project/ so `import snowflake.connector` resolves correctly.
-_THIS_DIR = str(Path(__file__).resolve().parent)
-sys.path[:] = [p for p in sys.path if p != _THIS_DIR]
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Project"))
 from db.snowflake import Snowflake
 
 

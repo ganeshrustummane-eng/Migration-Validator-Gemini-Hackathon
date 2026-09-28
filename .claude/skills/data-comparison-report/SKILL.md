@@ -217,9 +217,9 @@ the quality-check code at all (same as composite PKs never do).
   neither exists today.
 - [ ] If touching `Project/tiered_runner.py`, verify the change is behind the
   existing `hybrid_v1` opt-in and doesn't alter `main.py`'s non-hybrid behavior --
-  run `Project/test_tiered_runner.py` (differential checks against the untiered
-  oracle) alongside `Project/test_hybrid_dispatch.py`,
-  `Project/test_incremental_mode.py` and `Project/utils/test_quality_checks.py`.
+  run `tests/project/test_tiered_runner.py` (differential checks against the untiered
+  oracle) alongside `tests/project/test_hybrid_dispatch.py`,
+  `tests/project/test_incremental_mode.py` and `tests/project/test_quality_checks.py`.
   These tests *mirror* `main.py`'s per-block loop (it isn't import-safe) -- if you
   change the loop, update the mirrors in the same pass.
 - [ ] Any new per-run setting goes through the subprocess environment (ADR 0034

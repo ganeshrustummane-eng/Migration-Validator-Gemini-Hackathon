@@ -1,11 +1,11 @@
 """Self-check for the Postgres connector's timeout hardening.
-Run: python Project/db/test_postgres.py
+Run: python tests/project/test_postgres.py
 """
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Project"))
 from db.postgres import Postgres
 
 

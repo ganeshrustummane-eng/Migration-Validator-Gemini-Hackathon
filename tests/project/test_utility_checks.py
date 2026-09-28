@@ -1,10 +1,14 @@
 """Self-check for the pure decision helpers in utility.py — no DB, no fixtures.
-Run: python Project/utils/test_utility_checks.py
+Run: python tests/project/test_utility_checks.py
 """
+import os
+import sys
 import tempfile
 import threading
 
 import pandas as pd
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project", "utils"))
 
 from utility import count_validation_match, create_summary, row_hash_fallback_looks_like_column_drift
 

@@ -5,10 +5,10 @@ existing, unmodified compare_indexed_frames on the full, untiered data?
 
 No live DB connection — source/target are fake objects implementing just the
 two methods run_table_hybrid needs (execute_query_stream, execute_query), same
-duck-typing style as Project/db/test_postgres.py's MagicMock fakes.
+duck-typing style as tests/project/test_postgres.py's MagicMock fakes.
 
-Run:  python -m pytest Project/test_tiered_runner.py -q
-  or: python Project/test_tiered_runner.py
+Run:  python -m pytest tests/project/test_tiered_runner.py -q
+  or: python tests/project/test_tiered_runner.py
 """
 
 import os
@@ -16,7 +16,7 @@ import re
 import sys
 from unittest.mock import patch
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project"))
 
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402

@@ -17,7 +17,7 @@ Two class constants control both: `CONNECT_TIMEOUT_SECONDS` (10s) and
 `STATEMENT_TIMEOUT_SECONDS` (1800s/30min, server-side query ceiling) — override on
 an instance if one table's validation query genuinely needs longer (e.g. a
 200M+-row full scan). Before this, connect and query could both hang forever; see
-`Project/db/test_postgres.py` for the mocked timeout checks.
+`tests/project/test_postgres.py` for the mocked timeout checks.
 `execute_query()` opens a fresh connection per call, `cur.fetchall()`s the whole
 result set (no chunking/pagination — psycopg2's `fetchall()` returns the true full
 result set, unlike Athena's paginated REST API, so no truncation risk here), builds

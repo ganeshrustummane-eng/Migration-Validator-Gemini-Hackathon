@@ -2,14 +2,14 @@
 to runner.start_validation() (passed to the main.py child process only),
 never from dates left in the YAML.
 
-Run:  python -m pytest Project/test_incremental_mode.py -q
+Run:  python -m pytest tests/project/test_incremental_mode.py -q
 """
 
 import os
 import sys
 from unittest import mock
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project"))
 
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402

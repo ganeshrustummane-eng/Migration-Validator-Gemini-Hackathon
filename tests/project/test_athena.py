@@ -1,12 +1,12 @@
 """Self-check for the Athena connector's timeout + pagination fix.
-Run: python Project/db/test_athena.py
+Run: python tests/project/test_athena.py
 """
 import sys
 import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Project"))
 from db.athena import Athena
 
 

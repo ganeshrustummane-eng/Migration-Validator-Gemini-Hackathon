@@ -9,14 +9,14 @@ against a table_config shaped exactly like what
 src/generated_queries/yaml_config_writer.py now emits for a hybrid_v1 table,
 using the real should_dispatch_hybrid() predicate main.py calls.
 
-Run:  python -m pytest Project/test_hybrid_dispatch.py -q
-  or: python Project/test_hybrid_dispatch.py
+Run:  python -m pytest tests/project/test_hybrid_dispatch.py -q
+  or: python tests/project/test_hybrid_dispatch.py
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project"))
 
 import pytest  # noqa: E402
 
@@ -101,7 +101,7 @@ def test_main_skips_row_hash_validation_before_placeholder_check():
     at import, so check its loop source directly: the row_hash_validation
     skip must exist and come before the placeholder check (i.e. before any
     query can run for that block)."""
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py"), encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project", "main.py"), encoding="utf-8") as f:
         src = f.read()
     skip = src.find('if validation_name == "row_hash_validation":\n                    continue')
     placeholder = src.find('if not source or not source_query or str(source_query).strip() in ("SELECT 1;", "SELECT 1"):')
@@ -112,7 +112,7 @@ def test_main_skips_row_hash_validation_before_placeholder_check():
 def test_main_passes_plan_identity_to_hybrid():
     """ADR 0037: already-generated YAML reaches the PK-less branch without
     regeneration only if main.py hands validation_plan.identity to hybrid."""
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "main.py"), encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project", "main.py"), encoding="utf-8") as f:
         src = f.read()
     call = src[src.find("tiered_runner.run_table_hybrid("):]
     assert 'identity=_plan_block.get("identity")' in call[:call.find(")\n")]

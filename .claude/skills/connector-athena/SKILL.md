@@ -39,7 +39,7 @@ it's poll-based:
 This poll-and-wait model is Athena's real architecture (query execution is
 asynchronous by nature, not a bug or a workaround) -- don't try to make it
 synchronous or remove the polling loop; the fix was bounding it and paginating
-the fetch, not replacing the model. See `Project/db/test_athena.py` for the
+the fetch, not replacing the model. See `tests/project/test_athena.py` for the
 mocked pagination + timeout checks.
 
 ## Schema extraction -- `AthenaExtractor`

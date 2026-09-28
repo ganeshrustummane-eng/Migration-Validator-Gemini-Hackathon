@@ -1,6 +1,11 @@
+import os
+import sys
+
 import pytest
 
-from incremental_filter import apply_incremental_predicate
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project", "utils"))
+
+from incremental_filter import apply_incremental_predicate  # noqa: E402
 
 
 def test_adds_where_when_none_exists():

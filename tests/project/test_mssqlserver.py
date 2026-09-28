@@ -1,11 +1,11 @@
 """Self-check for the MSSQL connector's timeout hardening.
-Run: python Project/db/test_mssqlserver.py
+Run: python tests/project/test_mssqlserver.py
 """
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Project"))
 from db.mssqlserver import Mssqlserver
 
 

@@ -5,14 +5,14 @@ inline comparison block (see docs/large-table-scalable-architecture) didn't
 change behavior, and the cases from that design doc's differential-test list
 (§K) that don't need a live DB connection.
 
-Run:  python -m pytest Project/utils/test_row_compare.py -q
-  or: python Project/utils/test_row_compare.py
+Run:  python -m pytest tests/project/test_row_compare.py -q
+  or: python tests/project/test_row_compare.py
 """
 
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Project"))
 
 import pandas as pd  # noqa: E402
 
