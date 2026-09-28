@@ -21,6 +21,7 @@ from utils.semantic_normalize import canonicalize_frames
 from utils.quality_checks import append_validation_audit, run_integrity_check, run_quality_checks, validate_expected_grain
 from utils.row_compare import compare_indexed_frames
 from utils.incremental_filter import apply_incremental_predicate
+from utils.environments import ENVIRONMENTS, resolve_env_placeholders
 from datetime import datetime
 
 
@@ -67,7 +68,7 @@ parser.add_argument(
     "--environment",
     nargs=1,
     required=True,
-    choices=['dev','uat','prod','local']
+    choices=list(ENVIRONMENTS)
 )
 
 args = parser.parse_args()
@@ -176,7 +177,8 @@ for validation in validation_dirs:
         # config file and keeps going.
         try:
             with open(yamlfile) as f:
-                config = yaml.safe_load(f)
+                # {env}_EDGE_SILVER -> DEV_/STG_/QAT_/PRD_EDGE_SILVER for this run (ADR 0038).
+                config = resolve_env_placeholders(yaml.safe_load(f), environment)
         except (FileNotFoundError, yaml.YAMLError) as e:
             logger.error("Could not load config file %s — skipping it, other tables still run: %s", yamlfile, e)
             failure_count += 1

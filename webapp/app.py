@@ -62,6 +62,7 @@ import mapping_store
 from generated_queries.ai_sql_generator import AISQLQueryGenerator, AISQLGenerationError
 from runner import list_configured_tables, run_validation, start_validation, collect_validation_result, terminate_validation
 import results_store
+from Project.utils.environments import ENVIRONMENTS
 
 sys.path.insert(0, str(_ROOT_DIR / "token_usage_analysis"))
 from report_token_usage import _load_records as _load_token_records, _load_pricing, _cost_for
@@ -3497,7 +3498,7 @@ with tab_execute:
     with _exec_top1:
         layer = st.selectbox("Medallion layer", _LAYERS, index=0, key="exec_layer")
     with _exec_top2:
-        environment = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="exec_env")
+        environment = st.selectbox("Environment", list(ENVIRONMENTS), key="exec_env")
 
     # ── Execution mode: historical (default, unchanged) vs incremental ──────
     # Incremental only narrows the row set via a per-table filter_column that
@@ -4421,7 +4422,7 @@ with st.sidebar.expander(_sched_label, expanded=False):
         st.markdown("**Auto-run validation on a fixed schedule.**  \n*App must stay open.*")
         st.divider()
         _sched_layer = st.selectbox("Layer", _LAYERS, key="sched_layer")
-        _sched_env = st.selectbox("Environment", ["local", "dev", "uat", "prod"], key="sched_env")
+        _sched_env = st.selectbox("Environment", list(ENVIRONMENTS), key="sched_env")
         _sched_interval = st.selectbox(
             "Interval",
             ["Every 1 hour", "Every 6 hours", "Every 12 hours", "Daily (midnight)"],

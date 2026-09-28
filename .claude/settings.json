@@ -7,7 +7,23 @@
       "PowerShell(python -m pytest Project/test_tiered_runner.py Project/test_hybrid_dispatch.py Project/test_incremental_mode.py -q 2>&1)",
       "PowerShell(python -m pytest src/generated_queries/test_sql_query_generator.py -q 2>&1)",
       "PowerShell(python -m pytest src/validation/test_execution_strategy.py -q 2>&1)",
-      "PowerShell(python -m py_compile Project/main.py Project/tiered_runner.py Project/test_tiered_runner.py Project/test_hybrid_dispatch.py; \"py_compile exit: $LASTEXITCODE\"; python -m pytest Project/test_tiered_runner.py -q -k \"pk_less or identity or composite\" 2>&1 | Select-Object -Last 2; python -m pytest Project -q 2>&1 | Select-Object -Last 15; Push-Location src; python -m pytest -q 2>&1 | Select-Object -Last 15; Pop-Location)"
+      "PowerShell(python -m py_compile Project/main.py Project/tiered_runner.py Project/test_tiered_runner.py Project/test_hybrid_dispatch.py; \"py_compile exit: $LASTEXITCODE\"; python -m pytest Project/test_tiered_runner.py -q -k \"pk_less or identity or composite\" 2>&1 | Select-Object -Last 2; python -m pytest Project -q 2>&1 | Select-Object -Last 15; Push-Location src; python -m pytest -q 2>&1 | Select-Object -Last 15; Pop-Location)",
+      "PowerShell(Get-ChildItem .claude/agents | ForEach-Object { \"=== $\\($_.Name\\)\"; Get-Content $_.FullName -TotalCount 12 }; \\(Get-ChildItem .claude/agents | ForEach-Object { \"$\\($_.Name\\): $\\(\\(Get-Content $_.FullName | Measure-Object -Line\\).Lines\\) lines\" }\\))",
+      "Edit(/.claude/skills/silver-layer-coalesce-validation/**)",
+      "Edit(/.claude/skills/data-comparison-report/**)",
+      "Edit(/.claude/skills/normalization-and-exclusions/**)",
+      "Edit(/.claude/skills/reference-filter-joins/**)",
+      "Bash(node bin/archify.mjs validate workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\yaml-generation-flow.workflow.json\" --quality showcase --json)",
+      "Bash(node bin/archify.mjs validate workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\execution-engine-flow.workflow.json\" --quality showcase --json)",
+      "Bash(node bin/archify.mjs validate workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\yaml-generation-flow.workflow.json\" --quality standard --json)",
+      "Bash(node bin/archify.mjs validate workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\execution-engine-flow.workflow.json\" --quality standard --json)",
+      "Bash(node bin/archify.mjs deliver workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\yaml-generation-flow.workflow.json\" \"c:\\\\Storable-Framework-UI\\\\Migration-validator\\\\docs\\\\architecture\\\\yaml-generation-flow.html\" --quality standard --json)",
+      "Bash(node bin/archify.mjs deliver workflow \"C:\\\\Users\\\\GaneshRustumMane\\\\.claude\\\\projects\\\\c--Storable-Framework-UI-Migration-validator\\\\scratchpad\\\\execution-engine-flow.workflow.json\" \"c:\\\\Storable-Framework-UI\\\\Migration-validator\\\\docs\\\\architecture\\\\execution-engine-flow.html\" --quality standard --json)",
+      "Bash(node bin/archify.mjs visual-check \"c:\\\\Storable-Framework-UI\\\\Migration-validator\\\\docs\\\\architecture\\\\yaml-generation-flow.html\" --json)",
+      "Bash(node bin/archify.mjs visual-check \"c:\\\\Storable-Framework-UI\\\\Migration-validator\\\\docs\\\\architecture\\\\execution-engine-flow.html\" --json)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\GaneshRustumMane\\.claude\\projects\\c--Storable-Framework-UI-Migration-validator\\scratchpad"
     ]
   }
 }

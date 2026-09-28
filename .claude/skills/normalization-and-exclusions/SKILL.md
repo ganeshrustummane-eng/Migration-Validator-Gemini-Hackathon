@@ -35,6 +35,7 @@ The exclusion system has three levels, checked in this order:
 
 1. **Global** — `config/exclusions.yaml`: applies to every source regardless of DB type. Mostly Fivetran metadata patterns.
 2. **System (per-source-DB)** — `config/postgresql_exclusions.yaml`, `mssql_exclusions.yaml`, `athena_exclusions.yaml`, `redshift_exclusions.yaml`: same Fivetran patterns plus DB-specific extras (e.g. MSSQL's rowversion `UTS`/`uTS` columns). These 5 files are ~90% duplicate content today — if you're touching exclusions and the change applies to all sources, prefer editing the shared pattern once (or consolidating the files) over copy-pasting into all 5.
+   - Not source-DB files, don't merge into the 5: `config/silver_exclusions.yaml` (`"silver"`, ADR 0015) and `config/bronze_schema_exclusions.yaml` (`"bronze_schema"`, Bronze schema-validation "Mark OK" decisions, ADR 0024/0025 — stops re-flagging only, doesn't exclude from value comparison).
 3. **Table-specific** — set at runtime in the UI (Exclusions tab / batch generation form), not stored in a static YAML. Layered on top of global + system.
 
 ### Fivetran-active detection — currently scattered, be careful not to add a 6th copy

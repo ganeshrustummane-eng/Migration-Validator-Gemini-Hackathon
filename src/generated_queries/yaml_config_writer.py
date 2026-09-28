@@ -62,6 +62,7 @@ Key design decisions:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional
 
@@ -69,6 +70,7 @@ import yaml
 
 from ai_transformation.column_mapping import ColumnRuleMapping
 from generated_queries.sql_query_generator import ValidationQuerySet, _plan_to_rule_mappings
+from Project.utils.environments import tokenize_database
 
 if TYPE_CHECKING:
     from core.validation_plan import CanonicalValidationPlan
@@ -82,6 +84,17 @@ _BRONZE_CONFIG_DIR = Path(__file__).parent.parent.parent / "Project" / "config" 
 # The 'sourcequery: |' key sits at 8-space depth inside the YAML tree.
 # All content lines must be indented MORE than 8 → we use 10 spaces.
 _QUERY_INDENT = 10
+
+
+def _tokenize_env(text: str, *databases: str) -> str:
+    """Swap each database's environment prefix for {env} everywhere in text
+    (DEV_EDGE_SILVER -> {env}_EDGE_SILVER), so one YAML runs in any
+    --environment. Plan JSON and live lookups keep the real name; only the
+    YAML on disk is tokenized. See docs/decisions/0038."""
+    for db in databases:
+        if db:
+            text = text.replace(db, tokenize_database(db))
+    return text
 
 
 class YAMLConfigWriter:
@@ -151,24 +164,28 @@ class YAMLConfigWriter:
 
         active = [m for m in mappings if not m.skip_validation]
 
-        # Build normalized PK column names — the SQL SELECT aliases every
-        # expression as "{source_col}_normalized", so PK names must match.
+        # Build PK column names matching the SQL SELECT aliases. Bronze aliases
+        # every expression as "{source_col}_normalized"; Silver aliases it as
+        # the plain target column name (silver_sql_emitter.py), so no suffix.
         # Use explicit PK lists from the plan when available; fall back to
         # first active column (single-PK tables where list wasn't supplied).
+        suffix = "" if layer == "silver" else "_normalized"
         if source_primary_keys and len(source_primary_keys) > 1:
-            src_pk = [f"{c}_normalized" for c in source_primary_keys]
+            src_pk = [f"{c}{suffix}" for c in source_primary_keys]
             tgt_pk = src_pk  # target SQL aliases always use source column names
         elif source_primary_keys and len(source_primary_keys) == 1:
-            src_pk = f"{source_primary_keys[0]}_normalized"
+            src_pk = f"{source_primary_keys[0]}{suffix}"
             tgt_pk = src_pk  # target SQL aliases always use source column names
         else:
-            first_src_col = active[0].source_column if active else "id"
-            src_pk = f"{first_src_col}_normalized"
+            first = active[0] if active else None
+            first_col = (first.target_column if layer == "silver" else first.source_column) if first else "id"
+            src_pk = f"{first_col}{suffix}"
             tgt_pk = src_pk
 
         def _prep(sql: str) -> str:
             clean = _strip_generator_header(sql)
-            return _to_indented_multiline(clean) if layer == "silver" else _to_single_line(clean)
+            # Bronze and Silver both keep line breaks (ADR 0039).
+            return _to_indented_multiline(clean)
 
         yaml_content = _build_data_yaml(
             table_name_source=pg_table,
@@ -216,6 +233,10 @@ class YAMLConfigWriter:
             row_hash_source_yaml=_prep(query_set.row_hash_source),
             row_hash_target_yaml=_prep(query_set.row_hash_target),
         )
+
+        yaml_content = _tokenize_env(yaml_content, source_database, sf_database)
+        # A plain scalar starting with "{" is a YAML flow mapping -- quote it.
+        yaml_content = re.sub(r"^(\s*\w+_database: )(\{env\}\S*)$", r'\1"\2"', yaml_content, flags=re.M)
 
         yaml_path = out_dir / f"{pg_table}.yaml"
         with open(yaml_path, "w", encoding="utf-8") as f:
@@ -274,6 +295,9 @@ class YAMLConfigWriter:
                 }
             }
         }
+        _count = block["validations"]["count_validation"]
+        for key in ("source_database", "sourcequery", "target_database", "targetquery"):
+            _count[key] = _tokenize_env(_count[key] or "", source_database, sf_database)
 
         document = _load_yaml_document(yaml_path)
         tables = document.setdefault("tables", {})
@@ -338,10 +362,8 @@ class YAMLConfigWriter:
             plan      : Fully constructed CanonicalValidationPlan
             query_set : ValidationQuerySet already generated from the same plan
             output_dir: Output directory (default: config/bronze/data_validation/)
-            layer     : 'bronze' or 'silver' -- controls only sourcequery/targetquery
-                        formatting (see _prep in write()); Silver keeps its
-                        readable multi-line SQL instead of being flattened
-                        to one line (ADR 0022).
+            layer     : 'bronze' or 'silver' -- kept for callers; both layers
+                        now write multi-line SQL (ADR 0039).
 
         Returns:
             Path to the written YAML file.
@@ -639,18 +661,10 @@ def _strip_generator_header(sql: str) -> str:
     return "\n".join(lines).strip() if lines else sql.strip()
 
 
-def _to_single_line(sql: str) -> str:
-    """Collapse multi-line SQL to one space-separated line, 10-space indented for YAML block."""
-    single = " ".join(line.strip() for line in sql.splitlines() if line.strip())
-    return " " * _QUERY_INDENT + single
-
-
 def _to_indented_multiline(sql: str) -> str:
-    """Re-indent already multi-line SQL (one column per line, as
-    silver_sql_emitter.py emits it) to _QUERY_INDENT spaces per line, keeping
-    every line break -- unlike _to_single_line(), used for Bronze. ADR 0022:
-    flattening Silver's SQL onto one line broke it once a `--` comment was
-    present (the comment ate everything after it), and is unreadable besides;
-    Silver's SQL now never contains comments (macro-skip columns are simply
-    omitted from the SELECT), so keeping it multi-line is safe."""
+    """Re-indent already multi-line SQL (one column per line) to
+    _QUERY_INDENT spaces per line, keeping every line break. Used for both
+    layers (ADR 0039; Silver since ADR 0022/0023): flattening SQL onto one
+    line broke it once a `--` comment was present (the comment ate everything
+    after it), and is unreadable besides."""
     return "\n".join(" " * _QUERY_INDENT + line for line in sql.splitlines())

@@ -1,6 +1,6 @@
 ---
 name: data-comparison-report
-description: "Use when working on row-level data comparison, on how validation results get written to CSV, or on the large-table (200-300M row) hybrid Tier-1/Tier-2 execution strategy. Project/main.py is the correctness oracle and the only engine for tables that haven't opted in; Project/tiered_runner.py is an additive, opt-in (validation_plan.execution_strategy: hybrid_v1) alternate execution strategy for the same row-level comparison + quality-check contract, never a second independent engine. The former second, chat-agent-only engine (src/validation/data_validator.py, count_validator.py, validation_executor.py) was removed with the chatbot and moved to trash/validation/. Files: Project/main.py, Project/runner.py, Project/tiered_runner.py, Project/utils/quality_checks.py, Project/db/*.py."
+description: "Use when working on row-level data comparison, on how validation results get written to CSV, on Historical vs. Incremental runs (validation_plan.incremental + VALIDATOR_INCREMENTAL_* env), integrity_check (sanity) blocks, report-pack execution, or on the large-table (200-300M row) hybrid Tier-1/Tier-2 execution strategy. Project/main.py is the correctness oracle and the only engine for tables that haven't opted in; Project/tiered_runner.py is an additive, opt-in (validation_plan.execution_strategy: hybrid_v1) alternate execution strategy for the same row-level comparison + quality-check contract, never a second independent engine. The former second, chat-agent-only engine (src/validation/data_validator.py, count_validator.py, validation_executor.py) was removed with the chatbot and moved to trash/validation/. Files: Project/main.py, Project/runner.py, Project/tiered_runner.py, Project/utils/quality_checks.py, Project/db/*.py."
 ---
 
 # Data comparison and CSV reporting -- one engine
@@ -135,11 +135,63 @@ oracle-vs-hybrid run in §T). Four things to know before touching these:
   `_quality_aggregate_sql` before it was fixed). `_probe_columns` and
   `_limit_query`/`_fetch_sample` are exempt -- both use `SELECT *`.
 
-**Scope limits, current as of this session**: single-column PK or PK-less
-(`row_hash`-keyed) tables only. Composite PKs raise `NotImplementedError`
-immediately. PK-less tables get row-level PASS/FAIL only when Tier 1 finds a clean
-match on every key -- any mismatch raises rather than guessing, and PK-less tables
-never reach the quality-check code at all (same as composite PKs never do).
+**Scope limits**: single-column PK or PK-less (`row_hash`-keyed) tables only.
+Composite PKs raise `NotImplementedError` immediately. PK-less tables get a single
+`row_key=ALL` PASS only when Tier 1 finds a clean match on every key -- any mismatch
+raises the documented refusal rather than guessing, and PK-less tables never reach
+the quality-check code at all (same as composite PKs never do).
+
+- **PK-less detection uses `validation_plan.identity` (ADR 0037).**
+  `run_table_hybrid(..., identity=...)` (passed from `main.py`) treats the table as
+  PK-less when `identity.source_primary_keys` is empty, even though generated YAML
+  carries the legacy `<first_col>_normalized` `pksourcecolumn` fallback. Without an
+  `identity` block (hand-written YAML) the old `not pksourcecolumn` rule applies.
+  Non-hybrid `main.py` still keys on the fallback column -- unchanged.
+- **Hash hex is lower-cased at the source (ADR 0036).** `_hash_expression` wraps
+  MSSQL (`LOWER(CONVERT(VARCHAR(64), HASHBYTES(...), 2))`) and Athena
+  (`lower(to_hex(...))`) so PK-less `record_key` matches Snowflake's lowercase
+  `SHA2`. Don't lower-case keys in `_collect_hash_multimap` -- that would merge
+  distinct string PKs. YAMLs generated before the fix need regenerating.
+- **`row_hash_validation` is a helper block, never a validation (ADR 0035).**
+  `main.py` skips it at the top of the per-block loop; only Tier 1 reads it
+  (`row_hash_config`). No `row_hash_validation_*` CSVs/summary are produced.
+  `transformation_validation`/`aggregate_validation` still execute standalone
+  (their status is deliberately left open).
+
+## Historical vs. incremental runs (ADR 0030-0034)
+
+- **Capability** lives in the table's YAML: `validation_plan.incremental.{enabled, filter_column}`.
+  It never filters a run by itself.
+- **The run's mode** travels via the subprocess environment only:
+  `runner.start_validation(..., incremental_range=(from, to))` sets
+  `VALIDATOR_INCREMENTAL_FROM_DATE`/`_TO_DATE`; `None` *removes* both so nothing
+  leaks into a Historical run. `main.py` reads them once at startup via
+  `utility.read_incremental_range()` (strict `YYYY-MM-DD`, only-one-set or
+  from > to → exit code 2). Dates are **never** written into YAML; leftover YAML date
+  keys are ignored. Scheduler and direct CLI runs are always Historical.
+- Per block: `utility.incremental_filter_column()` decides; an Incremental run on an
+  unconfigured `data_validation` block is an ERROR row, never a silent full scan.
+  `Project/utils/incremental_filter.py::apply_incremental_predicate()` appends the
+  same `BETWEEN` predicate to both `source_query` and `target_query` (standard path
+  only). Count validation stays full-table in Incremental mode.
+- **hybrid_v1 + incremental is blocked**: `check_hybrid_incremental_conflict()`
+  raises (ERROR row) when the table is hybrid and the predicate would apply *this
+  run* (ADR 0033/0034). Historical hybrid runs are unaffected.
+- Known limits: date-only precision (ADR 0031 `ponytail:`), regex top-level `WHERE`
+  detection untested against custom-SQL YAML with subquery `WHERE`s.
+
+## Integrity (sanity) checks and report packs (ADR 0030/0031)
+
+- `integrity_check:` block (`IntegrityCheckBlock` in `src/validation/config_schema.py`,
+  source-only, `extra="forbid"`): `main.py` routes it by key name to
+  `quality_checks.run_integrity_check()` -- 0 rows = PASS, any rows = FAIL with the
+  violation count. It never enters the source/target compare path. Authored by
+  hand-editing YAML for now (no generation form yet). Summary:
+  `*/integrity_check_summary.csv`, collected by `runner.collect_validation_result()`.
+- Report packs are directory names under `config/report/<pack>/` -- never a
+  hardcoded list. The Run Validation tab discovers them from the filesystem and
+  shows a pack-level pass/fail rollup; no engine change was needed.
+- Excel diff report output is **deferred** (ADR 0030 Decision 5).
 
 ## Report format facts (verified, not aspirational)
 
@@ -166,6 +218,10 @@ never reach the quality-check code at all (same as composite PKs never do).
 - [ ] If touching `Project/tiered_runner.py`, verify the change is behind the
   existing `hybrid_v1` opt-in and doesn't alter `main.py`'s non-hybrid behavior --
   run `Project/test_tiered_runner.py` (differential checks against the untiered
-  oracle) alongside `Project/test_hybrid_dispatch.py` and
-  `Project/utils/test_quality_checks.py`.
+  oracle) alongside `Project/test_hybrid_dispatch.py`,
+  `Project/test_incremental_mode.py` and `Project/utils/test_quality_checks.py`.
+  These tests *mirror* `main.py`'s per-block loop (it isn't import-safe) -- if you
+  change the loop, update the mirrors in the same pass.
+- [ ] Any new per-run setting goes through the subprocess environment (ADR 0034
+  precedent), not a new argparse flag and not a YAML write.
 - [ ] `py_compile` any touched `.py` file before calling the change done.

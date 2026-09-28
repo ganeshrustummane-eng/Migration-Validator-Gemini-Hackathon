@@ -7,20 +7,14 @@ from db.postgres import Postgres
 from db.mssqlserver import Mssqlserver
 from db.athena import Athena
 from db.snowflake import Snowflake
+from utils.environments import ENVIRONMENTS
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 ROOT_DIR = PROJECT_DIR.parent
 
 # One .env file per environment — same shape/keys as the root .env already
 # used by webapp/src (SRC_N_*, SNOWFLAKE_*), just a different file per target.
-# This replaces the old Project/creds/<env>.yaml scheme so there is a single
-# credential format instead of two.
-_ENV_FILE_BY_ENVIRONMENT = {
-    "local": ".env",
-    "dev": ".env.dev",
-    "uat": ".env.uat",
-    "prod": ".env.prod",
-}
+# The environment list itself lives in utils/environments.py (ADR 0038).
 
 _TYPE_ALIASES = {
     "postgresql": {"postgresql", "postgres"},
@@ -35,7 +29,7 @@ def _load_env(environment: str) -> dict:
     # .env file exists — e.g. Cloud Run, which injects SRC_N_*/SNOWFLAKE_* as
     # actual env vars/secrets rather than a checked-in .env file. The file, when
     # present (local dev), still takes precedence over the ambient environment.
-    fname = _ENV_FILE_BY_ENVIRONMENT.get(environment, f".env.{environment}")
+    fname = ENVIRONMENTS[environment][0] if environment in ENVIRONMENTS else f".env.{environment}"
     path = ROOT_DIR / fname
     file_env = dotenv_values(path) if path.exists() else {}
     return {**os.environ, **file_env}

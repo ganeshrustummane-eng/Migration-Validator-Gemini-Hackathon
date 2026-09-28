@@ -4,22 +4,22 @@
     "database": "my_test_pg",
     "db_type": "postgresql",
     "schema": "public",
-    "table": "customers"
+    "table": "facilities"
   },
   "target": {
-    "database": "MV_TEST",
+    "database": "DEV_EDGE_BRONZE",
     "db_type": "snowflake",
-    "schema": "PUBLIC",
-    "table": "CUSTOMERS"
+    "schema": "storedge_fms_public",
+    "table": "FACILITIES"
   },
-  "source_table": "my_test_pg.public.customers",
-  "target_table": "MV_TEST.PUBLIC.CUSTOMERS",
+  "source_table": "my_test_pg.public.facilities",
+  "target_table": "DEV_EDGE_BRONZE.storedge_fms_public.FACILITIES",
   "status": "complete",
-  "generated_at": "2026-09-28T14:10:26.964986",
+  "generated_at": "2026-09-28T15:12:57.126403",
   "generated_by": "fuzzy",
   "model_used": "N/A",
   "ai_calls_made": 0,
-  "has_fivetran_active": false,
+  "has_fivetran_active": true,
   "source_filter": "",
   "target_filter": "",
   "population_scope": {},
@@ -29,9 +29,7 @@
     "source_primary_keys": [
       "id"
     ],
-    "target_primary_keys": [
-      "ID"
-    ],
+    "target_primary_keys": [],
     "candidate_keys": []
   },
   "row_hash": null,
@@ -44,24 +42,22 @@
     "source": [
       "id"
     ],
-    "target": [
-      "ID"
-    ],
+    "target": [],
     "mismatch": false,
     "mismatch_reason": ""
   },
   "stats": {
-    "total_source_columns": 10,
-    "active_mappings": 10,
+    "total_source_columns": 8,
+    "active_mappings": 8,
     "skipped_mappings": 0,
-    "exact_matches": 10,
+    "exact_matches": 8,
     "fuzzy_matches": 0,
     "ai_resolved": 0,
     "unmatched_source": 0
   },
   "exclusions": {
-    "total_source_columns": 10,
-    "validated": 10,
+    "total_source_columns": 8,
+    "validated": 8,
     "excluded": [],
     "excluded_count": 0,
     "coverage_pct": 100.0
@@ -86,12 +82,12 @@
       "is_primary_key": true
     },
     {
-      "source_column": "first_name",
+      "source_column": "name",
       "source_type": "character varying",
-      "source_normalized": "firstname",
-      "target_column": "FIRST_NAME",
+      "source_normalized": "name",
+      "target_column": "NAME",
       "target_type": "TEXT",
-      "target_normalized": "firstname",
+      "target_normalized": "name",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",
@@ -99,12 +95,12 @@
       "reason": "Matched by exact (confidence=1.00)"
     },
     {
-      "source_column": "last_name",
+      "source_column": "software_provider",
       "source_type": "character varying",
-      "source_normalized": "lastname",
-      "target_column": "LAST_NAME",
+      "source_normalized": "softwareprovider",
+      "target_column": "SOFTWARE_PROVIDER",
       "target_type": "TEXT",
-      "target_normalized": "lastname",
+      "target_normalized": "softwareprovider",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",
@@ -112,12 +108,12 @@
       "reason": "Matched by exact (confidence=1.00)"
     },
     {
-      "source_column": "email",
+      "source_column": "city",
       "source_type": "character varying",
-      "source_normalized": "email",
-      "target_column": "EMAIL",
+      "source_normalized": "city",
+      "target_column": "CITY",
       "target_type": "TEXT",
-      "target_normalized": "email",
+      "target_normalized": "city",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",
@@ -125,12 +121,12 @@
       "reason": "Matched by exact (confidence=1.00)"
     },
     {
-      "source_column": "phone",
-      "source_type": "character varying",
-      "source_normalized": "phone",
-      "target_column": "PHONE",
+      "source_column": "state",
+      "source_type": "character",
+      "source_normalized": "state",
+      "target_column": "STATE",
       "target_type": "TEXT",
-      "target_normalized": "phone",
+      "target_normalized": "state",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",
@@ -151,25 +147,12 @@
       "reason": "Matched by exact (confidence=1.00)"
     },
     {
-      "source_column": "balance",
-      "source_type": "numeric",
-      "source_normalized": "balance",
-      "target_column": "BALANCE",
-      "target_type": "NUMBER",
-      "target_normalized": "balance",
-      "match_method": "exact",
-      "confidence": 1.0,
-      "transformation_rule": "text",
-      "validation_rules": [],
-      "reason": "Matched by exact (confidence=1.00)"
-    },
-    {
-      "source_column": "signup_date",
-      "source_type": "date",
-      "source_normalized": "signupdate",
-      "target_column": "SIGNUP_DATE",
-      "target_type": "DATE",
-      "target_normalized": "signupdate",
+      "source_column": "features",
+      "source_type": "jsonb",
+      "source_normalized": "features",
+      "target_column": "FEATURES",
+      "target_type": "VARIANT",
+      "target_normalized": "features",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",
@@ -183,19 +166,6 @@
       "target_column": "CREATED_AT",
       "target_type": "TIMESTAMP_NTZ",
       "target_normalized": "createdat",
-      "match_method": "exact",
-      "confidence": 1.0,
-      "transformation_rule": "text",
-      "validation_rules": [],
-      "reason": "Matched by exact (confidence=1.00)"
-    },
-    {
-      "source_column": "updated_at",
-      "source_type": "timestamp without time zone",
-      "source_normalized": "updatedat",
-      "target_column": "UPDATED_AT",
-      "target_type": "TIMESTAMP_NTZ",
-      "target_normalized": "updatedat",
       "match_method": "exact",
       "confidence": 1.0,
       "transformation_rule": "text",

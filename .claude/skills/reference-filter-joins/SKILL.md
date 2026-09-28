@@ -48,13 +48,12 @@ This is a bigger change than a filter — it means the plan's source side is no 
 - Reuse the existing CTE pattern in `ai_sql_generator.py` (`_build_snowflake_cte_query`, `snowflake_cte_join_clause`) as the template for building the multi-table FROM/JOIN clause — don't invent a second query-building path.
 - Validate join cardinality risk explicitly: a join that fans out rows (1:N) will inflate row counts and produce false mismatches. Flag this to the user and prefer aggregating (e.g. pre-aggregate the N-side) before comparison, or document that count validation must use a distinct source-row count, not `COUNT(*)` after the join.
 
-## Row-hash primary key comparison (use when PK is identified)
+## Row-hash comparison — what actually exists
 
-When a table's PK (single or composite) is known, prefer row-hash comparison over column-by-column diff for best signal and performance:
-- Build one hash per row: `HASH(col1, col2, ... colN)` (order columns deterministically, same order both sides) after applying transformation rules, so hash compares post-transformation values.
-- Compare `(pk, row_hash)` sets between source and target: matching PK + matching hash = pass; matching PK + different hash = mismatched columns (drill into per-column diff only for these); PK only on one side = missing/extra row.
-- This turns an N-column diff into a single-column set comparison — cheaper on 200M-row tables and gives a clean pass/fail per row without transferring every column both ways.
-- Fall back to full column-by-column comparison only when no PK is identified (composite business key guess, or no key at all).
+- `plan.row_hash` makes `yaml_config_writer.py` emit a `row_hash_validation:` block (SQL from `sql_query_generator.py::_row_hash_queries`/`_hash_expression`). That block is **only** an input to the opt-in `hybrid_v1` Tier-1 engine; `Project/main.py` never runs it as a validation (ADR 0035). Row-hash is not a replacement for `data_validation` on standard tables.
+- Hash hex must be lowercase on every dialect so it matches Snowflake: MSSQL/Athena are wrapped in `LOWER`/`lower` (ADR 0036). Postgres uses `MD5` on both sides (no `pgcrypto`).
+- `hybrid_v1` supports single-column PK or PK-less only (composite rejected by `PlanValidator`). PK-less is decided from `validation_plan.identity.source_primary_keys: []` (ADR 0037).
+- Separate mechanism: for PK-less standard tables, `main.py` computes its own Python `row_hash` fallback key inside `data_validation`.
 
 ## Where each capability plugs in
 
@@ -73,4 +72,5 @@ When a table's PK (single or composite) is known, prefer row-hash comparison ove
 - [ ] Existing single-table plans (no filter/join) still generate unchanged SQL
 - [ ] If a join can fan out rows, count validation logic is confirmed correct (pre-aggregated or explicitly documented)
 - [ ] Transformation check reuses an existing rule from `rule_book.py` when one matches, instead of a new hardcoded formula
-- [ ] When PK identified, row-hash comparison used instead of full column diff
+- [ ] Any hash-expression change keeps both sides the same algorithm and lowercase hex
+- [ ] Filters are baked into SQL at generation time (`source_filter`/`target_filter`); per-run date ranges are *not* — those are the incremental env-var contract (ADR 0034), see `data-comparison-report`

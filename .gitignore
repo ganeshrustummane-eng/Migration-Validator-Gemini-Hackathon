@@ -33,3 +33,10 @@ Thumbs.db
 # Project-specific configuration and output directories
 /project/config/
 /project/output/
+
+
+
+/docs/architecture/
+/docs/architecture/**/*.md
+/docs/architecture/**/*.yml
+/docs/architecture/**/*.yaml

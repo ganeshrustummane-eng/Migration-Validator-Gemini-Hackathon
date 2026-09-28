@@ -1,0 +1,479 @@
+{
+  "schema_version": 2,
+  "source": {
+    "database": "BRONZE_EDGE",
+    "db_type": "snowflake",
+    "schema": "CONFORMED_RRADHAKR",
+    "table": "DISCOUNT_LINES"
+  },
+  "target": {
+    "database": "DEV_EDGE_SILVER",
+    "db_type": "snowflake",
+    "schema": "CONFORMED_RRADHAKR",
+    "table": "INT_DISCOUNT_LINES"
+  },
+  "source_table": "BRONZE_EDGE.CONFORMED_RRADHAKR.DISCOUNT_LINES",
+  "target_table": "DEV_EDGE_SILVER.CONFORMED_RRADHAKR.INT_DISCOUNT_LINES",
+  "status": "complete",
+  "generated_at": "2026-09-28T14:30:05.502099",
+  "generated_by": "coalesce_metadata",
+  "model_used": "N/A",
+  "ai_calls_made": 0,
+  "has_fivetran_active": false,
+  "source_filter": "",
+  "target_filter": "",
+  "population_scope": {
+    "natural_key_candidates": [
+      "DISCOUNT_LINE_ID",
+      "NOTE",
+      "AMOUNT",
+      "KIND",
+      "DISCOUNT_AMOUNT",
+      "OWNER_ID",
+      "DISCOUNTED_BY_ID",
+      "CREATED_AT",
+      "SOURCE",
+      "UUID",
+      "DISCOUNT_AMOUNT_PER_TYPE",
+      "DISCOUNT_AMOUNT_BY_ID",
+      "UPDATED_AT",
+      "ORIGINAL_SUBTOTAL",
+      "FACILITY_ID",
+      "OWNER_TYPE",
+      "DISCOUNTED_ON",
+      "IS_CURRENT"
+    ]
+  },
+  "relationships": [],
+  "identity": {
+    "type": "primary_key",
+    "source_primary_keys": [
+      "DISCOUNT_LINE_ID"
+    ],
+    "target_primary_keys": [
+      "DISCOUNT_LINE_ID"
+    ],
+    "candidate_keys": []
+  },
+  "row_hash": null,
+  "transformations": [],
+  "validations": [],
+  "requires_review": true,
+  "review_reasons": [
+    "surrogate business key is macro-computed (DISCOUNT_LINE_KEY); macro-argument parsing is deferred to a manual UI override for v1 (ADR 0014 5) -- confirm the correct join grain before trusting this plan.",
+    "2 column(s) excluded from the SELECT pending Coalesce macro resolution (no macro engine yet -- ADR 0014 3, ADR 0022): OWNER_KEY, FACILITY_KEY"
+  ],
+  "execution_strategy": "standard",
+  "primary_keys": {
+    "source": [
+      "DISCOUNT_LINE_ID"
+    ],
+    "target": [
+      "DISCOUNT_LINE_ID"
+    ],
+    "mismatch": false,
+    "mismatch_reason": ""
+  },
+  "stats": {
+    "total_source_columns": 26,
+    "active_mappings": 21,
+    "skipped_mappings": 5,
+    "exact_matches": 21,
+    "fuzzy_matches": 0,
+    "ai_resolved": 0,
+    "unmatched_source": 0
+  },
+  "exclusions": {
+    "total_source_columns": 26,
+    "validated": 21,
+    "excluded": [
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"OWNER_ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"FACILITY_ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+        "type": "TIMESTAMP",
+        "reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+      },
+      {
+        "column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+        "type": "TIMESTAMP",
+        "reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+      }
+    ],
+    "excluded_count": 5,
+    "coverage_pct": 80.8
+  },
+  "warnings": [],
+  "ambiguities": [],
+  "unmatched_source_columns": [],
+  "unmatched_target_columns": [],
+  "mappings": [
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "discount_line_key",
+      "target_column": "DISCOUNT_LINE_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "discount_line_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3).",
+      "is_primary_key": true
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "discount_line_id",
+      "target_column": "DISCOUNT_LINE_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "discount_line_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"NOTE\"",
+      "source_type": "VARCHAR(4096)",
+      "source_normalized": "note",
+      "target_column": "NOTE",
+      "target_type": "VARCHAR(4096)",
+      "target_normalized": "note",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"AMOUNT\"",
+      "source_type": "NUMBER(16,2)",
+      "source_normalized": "amount",
+      "target_column": "AMOUNT",
+      "target_type": "NUMBER(16,2)",
+      "target_normalized": "amount",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"KIND\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "kind",
+      "target_column": "KIND",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "kind",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"DISCOUNT_AMOUNT\"",
+      "source_type": "NUMBER(16,2)",
+      "source_normalized": "discount_amount",
+      "target_column": "DISCOUNT_AMOUNT",
+      "target_type": "NUMBER(16,2)",
+      "target_normalized": "discount_amount",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"OWNER_ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "owner_key",
+      "target_column": "OWNER_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "owner_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"OWNER_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "owner_id",
+      "target_column": "OWNER_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "owner_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"DISCOUNTED_BY_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "discounted_by_id",
+      "target_column": "DISCOUNTED_BY_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "discounted_by_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"CREATED_AT\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "created_at",
+      "target_column": "CREATED_AT",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "created_at",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"SOURCE\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "source",
+      "target_column": "SOURCE",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "source",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"UUID\"",
+      "source_type": "VARCHAR(36)",
+      "source_normalized": "uuid",
+      "target_column": "UUID",
+      "target_type": "VARCHAR(36)",
+      "target_normalized": "uuid",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"DISCOUNT_AMOUNT_PER_TYPE\"",
+      "source_type": "VARIANT",
+      "source_normalized": "discount_amount_per_type",
+      "target_column": "DISCOUNT_AMOUNT_PER_TYPE",
+      "target_type": "VARIANT",
+      "target_normalized": "discount_amount_per_type",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"DISCOUNT_AMOUNT_BY_ID\"",
+      "source_type": "VARIANT",
+      "source_normalized": "discount_amount_by_id",
+      "target_column": "DISCOUNT_AMOUNT_BY_ID",
+      "target_type": "VARIANT",
+      "target_normalized": "discount_amount_by_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"UPDATED_AT\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "updated_at",
+      "target_column": "UPDATED_AT",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "updated_at",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"ORIGINAL_SUBTOTAL\"",
+      "source_type": "NUMBER(16,2)",
+      "source_normalized": "original_subtotal",
+      "target_column": "ORIGINAL_SUBTOTAL",
+      "target_type": "NUMBER(16,2)",
+      "target_normalized": "original_subtotal",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"DISCOUNT_LINES\".\"FACILITY_ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "facility_key",
+      "target_column": "FACILITY_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "facility_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"FACILITY_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "facility_id",
+      "target_column": "FACILITY_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "facility_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"OWNER_TYPE\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "owner_type",
+      "target_column": "OWNER_TYPE",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "owner_type",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"DISCOUNTED_ON\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "discounted_on",
+      "target_column": "DISCOUNTED_ON",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "discounted_on",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "ROW_NUMBER() OVER (PARTITION BY \"DISCOUNT_LINES\".\"ID\" ORDER BY \"DISCOUNT_LINES\".\"UPDATED_AT\")",
+      "source_type": "NUMBER",
+      "source_normalized": "sys_version",
+      "target_column": "SYS_VERSION",
+      "target_type": "NUMBER",
+      "target_normalized": "sys_version",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"DISCOUNT_LINES\".\"_FIVETRAN_ACTIVE\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "is_current",
+      "target_column": "IS_CURRENT",
+      "target_type": "BOOLEAN",
+      "target_normalized": "is_current",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "TO_TIMESTAMP_NTZ(\"DISCOUNT_LINES\".\"_FIVETRAN_START\")",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "effective_from",
+      "target_column": "EFFECTIVE_FROM",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "effective_from",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "is_primary_key": true
+    },
+    {
+      "source_column": "TO_TIMESTAMP_NTZ(\"DISCOUNT_LINES\".\"_FIVETRAN_END\")",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "effective_to",
+      "target_column": "EFFECTIVE_TO",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "effective_to",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "sys_create_date",
+      "target_column": "SYS_CREATE_DATE",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "sys_create_date",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [
+        "null_check"
+      ],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+    },
+    {
+      "source_column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "sys_update_date",
+      "target_column": "SYS_UPDATE_DATE",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "sys_update_date",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [
+        "null_check"
+      ],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+    }
+  ]
+}

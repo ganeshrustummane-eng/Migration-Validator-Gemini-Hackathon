@@ -73,8 +73,12 @@ be applied as a filter on the Snowflake side so only the latest active record pe
 key is compared (soft-deleted/superseded rows are not migration failures).
 
 Connection config is environment-driven: `SRC_1_*`, `SRC_2_*`, ... in `.env` /
-`.env.dev` / `.env.uat` / `.env.prod` (see `.env.example`), one block per source,
-`TYPE` picks the connector. `SNOWFLAKE_*` is the single target. `COALESCE_*`
+`.env.dev` / `.env.stg` / `.env.qat` / `.env.prod` (see `.env.example`), one block per source,
+`TYPE` picks the connector. The environment list (`local, dev, stg, qat, prod`)
+lives only in `Project/utils/environments.py`. Generated YAML stores database
+names with an `{env}` placeholder (`{env}_EDGE_SILVER`), and `main.py` resolves
+it per `--environment` (DEV/STG/QAT/PRD). Schemas and YAML keywords are
+unchanged. See ADR 0038. `SNOWFLAKE_*` is the single target. `COALESCE_*`
 (`COALESCE_API_TOKEN`, `COALESCE_WORKSPACE_ID`, `COALESCE_API_BASE`) is a
 separate, optional block for the Silver/Coalesce integration below — it's
 metadata *about* a transform, not a source or target connector.
@@ -147,8 +151,21 @@ values and ignore the difference.
   `get_node(workspace_id, node_id)`) + `src/silver/coalesce_plan_builder.py`
   (`build_plan(node_id, workspace_id=None) -> (CanonicalValidationPlan,
   SchemaDiff)` — turns one Coalesce node's metadata into the same plan
-  bronze's SQL/YAML generators consume). See
-  `docs/decisions/0013-0016` and the `silver-layer-coalesce-validation` skill.
+  bronze's SQL/YAML generators consume). `build_plan_from_metadata()` accepts
+  pasted node JSON. `src/silver/silver_sql_emitter.py` emits the Coalesce
+  transform verbatim inside the `COALESCE(CAST(.. AS STRING), '<<NULL>>')`
+  wrapper (ADR 0027), omits macro/non-deterministic columns with no SQL
+  comments, and Silver YAML stays multi-line (ADR 0023). See
+  `docs/decisions/0013-0027` and the `silver-layer-coalesce-validation` skill.
+  Open: `_FIVETRAN_ACTIVE` on the Bronze-recompute side (ADR 0020).
+- **Next stage (planned, not built): Silver filtration via Excel.** Row
+  filters for Silver nodes will come from an Excel file; the design is still
+  to be discussed. `silver_sql_emitter.py` has no filter support yet. Start
+  from the "Next stage" section of the `silver-layer-coalesce-validation`
+  skill and record the design as a new ADR before any code.
+- **Bronze schema validation** (ADR 0024/0025): `render_mapping_review()`'s
+  schema-validation section (column counts, missing/extra/type-mismatch,
+  "Mark OK" → `config/bronze_schema_exclusions.yaml`). Advisory, not a gate.
 - **Mapping pipeline (used by the UI)**: `src/validation_pipeline.py`'s
   `run_with_plan()` — exact/fuzzy column matching, AI only for ambiguous
   columns (`src/ai/rule_planner.py`). The older 100%-AI `run()` method and
@@ -157,7 +174,7 @@ values and ignore the difference.
 - **AI backend**: EPAM DIAL today (`DIAL_API_KEY`) — a proxy, used because a
   direct Claude key isn't issued yet. `CLAUDE_API_KEY` is supported as a
   fallback everywhere the AI backend is selected (`rule_planner.py`,
-  `ai_transformation/ai_rule_mapper.py`, `connector/agent.py`) and becomes the
+  `ai_transformation/ai_rule_mapper.py`) and becomes the
   primary path automatically once set, with no code change needed. Gemini
   support was removed entirely — don't add it back.
 - **Actual validation execution (row-level compare)**: `Project/main.py` +
@@ -173,6 +190,22 @@ values and ignore the difference.
   `src/validation/` still holds `config_schema.py` and `plan_validator.py` —
   those remain live (imported by `webapp/app.py`, `src/validate_cli.py`,
   `src/validation_pipeline.py`).
+- **Execution modes on that one engine** (details: `data-comparison-report` skill):
+  - Historical/Incremental: the capability lives in the YAML as
+    `validation_plan.incremental.{enabled, filter_column}`. The run's date
+    range is passed only through `VALIDATOR_INCREMENTAL_FROM_DATE`/`_TO_DATE`,
+    which `runner.start_validation(incremental_range=...)` sets. It is never
+    written into YAML (ADR 0034).
+  - `integrity_check:` sanity blocks are source-only; 0 rows = PASS (ADR 0030/0031).
+  - Report packs are the directories under `config/report/<pack>/`.
+  - `hybrid_v1` (`tiered_runner.py`) is opt-in and can't be combined with
+    incremental (ADR 0033).
+  - `row_hash_validation` is a hybrid helper block and is never run on its
+    own (ADR 0035).
+  - PK-less hybrid tables are identified from `validation_plan.identity`, and
+    hash hex is lowercase on every dialect (ADR 0036/0037).
+  - Per-run settings go in the subprocess environment, never in new CLI flags
+    or YAML writes.
 - **Semantic normalization** (hstore→VARIANT, jsonb→VARIANT, etc.):
   `Project/utils/semantic_normalize.py`. Well-tested, don't casually rewrite.
 - **Exclusions**: `config/exclusions.yaml` (global) + `config/*_exclusions.yaml`
@@ -184,7 +217,9 @@ values and ignore the difference.
   validation is Snowflake-to-Snowflake (Bronze and Silver both live in
   Snowflake, per ADR 0013), not a source-DB→Snowflake pair, so it can't be
   shoehorned into an existing per-source-DB-type file or a generic
-  "snowflake" key.
+  "snowflake" key. `config/bronze_schema_exclusions.yaml` (`"bronze_schema"`)
+  is a 7th: Bronze schema-validation "Mark OK" decisions (ADR 0024) — it
+  stops re-flagging, it does not exclude columns from value comparison.
 - **Base rule catalog (static/immutable)**: `src/rules/rules_catalog.json` (10
   rule entries, metadata only) + `src/rules/base_rules.py` (the Python classes
   that actually execute — the JSON file's embedded SQL templates for
@@ -258,9 +293,12 @@ divergence found once already); don't treat `.github/` as ground truth.
 - `base-rules-datatypes` — the static 10-rule catalog (`rules_catalog.json` + `base_rules.py`).
 - `learned-rules` — the mutable gap-filler/correction feedback loop.
 - `webapp-yaml-generation` — the webapp's own independent YAML-writing paths.
-- `excel-batch-ai-review-planned` — **not yet built**; design notes only for a
-  future AI-preview step on Excel-upload batch generation.
-- `data-comparison-report` — the two comparison engines and CSV report format.
+- `excel-batch-ai-review-planned` — Excel-upload batch AI preview (Bronze),
+  now implemented (`load_excel()`/`derive_row_plan()` in `src/excel_batch_loader.py`);
+  the skill name is historical. Reuse its Excel loading for the planned Silver
+  Excel filtration.
+- `data-comparison-report` — the one comparison engine, execution modes
+  (incremental, integrity_check, report pack, hybrid) and CSV report format.
 - `connector-postgresql`, `connector-mssql-sitelink`, `connector-athena`,
   `connector-redshift-tradeshift`, `connector-snowflake-target` — per-source/target
   connection, schema-extraction, and type-mapping specifics.

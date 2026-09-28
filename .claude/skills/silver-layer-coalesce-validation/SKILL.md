@@ -1,6 +1,6 @@
 ---
 name: silver-layer-coalesce-validation
-description: "Use when validating a Silver-layer Coalesce node against its Bronze source in Snowflake. Covers fetching a Coalesce node's metadata, classifying its columns (passthrough / recomputable expression / macro-skip / non-deterministic-existence-only), resolving surrogate business keys, multisource (multi-table-join) nodes, and turning the result into a CanonicalValidationPlan + SchemaDiff, then emitting Silver's own verbatim SQL (no base_rules.py wrapper). Files: coalesce_client.py, coalesce_plan_builder.py, silver_sql_emitter.py. See docs/decisions/0013-0019."
+description: "Use when validating a Silver-layer Coalesce node against its Bronze source in Snowflake. Covers fetching a Coalesce node's metadata, classifying its columns (passthrough / recomputable expression / macro-skip / non-deterministic-existence-only), resolving surrogate business keys, multisource (multi-table-join) nodes, and turning the result into a CanonicalValidationPlan + SchemaDiff, then emitting Silver's own SQL (Coalesce transform verbatim, wrapped in the Snowflake NULL placeholder, not routed through base_rules.py) and multi-line Silver YAML. Also the place to start for the planned (not yet built) Excel-driven Silver filtration. Files: coalesce_client.py, coalesce_plan_builder.py, silver_sql_emitter.py. See docs/decisions/0013-0027."
 ---
 
 # Silver-Layer Validation via Coalesce Metadata
@@ -55,29 +55,37 @@ matching, unlike bronze validation.
   - `write_schema_diff_exclusion(db_type: str, column: str, reason: str) -> bool`
     — thin wrapper over `validate_cli.save_global_user_exclusion()`; does
     not duplicate the write logic.
-- `src/silver/silver_sql_emitter.py` — Silver's own SQL emitter (ADR 0018).
+- `src/silver/silver_sql_emitter.py` — Silver's own SQL emitter (ADR 0018,
+  amended by 0023 and 0027).
   - `emit_query_set(plan: CanonicalValidationPlan) -> ValidationQuerySet` is
     the only entrypoint. It does **not** call `sql_query_generator.py` /
-    `ai_sql_generator.py` / `rules/base_rules.py` at all — no
-    `COALESCE(CAST(col AS STRING), '<<NULL>>')` wrapper, no type-normalization
-    rule lookup. Per column: passthrough/recomputable → selected verbatim
-    (`"<alias>"."<col>" AS "<target>"` or the raw transform expression AS
-    target); macro-skip → not selected, left as a `-- <target>: PENDING -
-    needs <macro> macro definition. Coalesce transform: ...` comment;
-    non-deterministic/other-skipped → omitted entirely (existing
-    `skip_validation`/`validation_rules=["null_check"]` mechanism handles the
-    existence/NOT-NULL-only check, nothing new built for that). The returned
-    `ValidationQuerySet` feeds `YAMLConfigWriter.write_from_plan()` unchanged.
+    `ai_sql_generator.py` / `rules/base_rules.py` — no per-type-pair rule
+    dispatch, no dialect switching. It **does** wrap every selected column,
+    on both the Bronze-recompute and Silver sides, in the single Snowflake
+    placeholder `COALESCE(CAST(<expr> AS STRING), '<<NULL>>')` (ADR 0027 —
+    inlined as one constant, not imported from `base_rules.py`). Per column:
+    passthrough/recomputable → the verbatim column reference or Coalesce
+    transform expression, wrapped, `AS "<target>"`; macro-skip,
+    non-deterministic and other skipped columns → **omitted from the SELECT
+    with no comment of any kind** (ADR 0023 — `--` comments broke flattened
+    SQL, `/* */` was rejected by the user). Macro-skip column names survive
+    only in `plan.review_reasons`. The existence/NOT-NULL-only check for
+    non-deterministic columns uses the existing
+    `skip_validation`/`validation_rules=["null_check"]` mechanism.
+  - The returned `ValidationQuerySet` feeds `YAMLConfigWriter.write_from_plan(..., layer="silver")`,
+    which keeps Silver SQL **multi-line** (`_to_indented_multiline()`);
+    Bronze stays single-line (`_to_single_line()`) — ADR 0023.
+  - The generated YAML carries the full `validation_plan:` block, same shape
+    as Bronze (ADR 0026) — not Silver-specific scope creep.
   - `resolve_ref_macro(text: str, bronze_schema: str) -> str` — resolves every
     Coalesce `{{ ref('LOCATION', 'NODE') }}` macro to
     `"LOCATION"."bronze_schema"."NODE"`, everything else in `text` passes
     through verbatim. Shared by `coalesce_plan_builder.py` (multisource
     `bronze_join_sql` construction) — implemented once, not twice (ADR 0019).
-  - `Project/main.py --layer_type silver` / `QueryOutputManager.generate_from_plan(plan, layer="silver")`
-    still need one branch (owned by `validation-query-yaml-generator`, not
-    this skill) to call `emit_query_set(plan)` instead of
-    `SQLQueryGenerator().generate_from_plan(plan)` when `layer == "silver"` —
-    see that agent's contract note.
+  - `QueryOutputManager.generate_from_plan(plan, layer="silver")` already
+    branches on `layer == "silver"` to call `emit_query_set(plan)` instead of
+    `SQLQueryGenerator().generate_from_plan(plan)` (owned by
+    `validation-query-yaml-generator`).
 
 ## Multisource nodes (ADR 0019)
 
@@ -105,16 +113,51 @@ Silver never calls `ai_sql_generator.py` at all now. That concern still
 stands for **Bronze**, which does route through `ai_sql_generator.py` — not
 this skill's problem to fix.
 
+## Open items (documented, don't silently "fix")
+
+- **`_FIVETRAN_ACTIVE` on the Bronze-recompute side — unresolved (ADR 0020).**
+  No filter is applied. The one real sample (`INT_FACILITIES`) is SCD-shaped
+  (`IS_CURRENT = _FIVETRAN_ACTIVE`), so a blanket `= TRUE` filter would
+  produce false `TARGET_ONLY` rows. Needs a per-node, declared/config-driven
+  flag or Coalesce-team confirmation — never inferred from column names.
+- **Macro resolution** (`{{ ids_to_surrogate_key(...) }}`) — still no
+  interpreter (ADR 0014 §3, 0023). Macro columns are omitted, not guessed.
+- **Silver YAMLs generated before ADR 0022/0023** (e.g. `LEADS.yaml`) have
+  truncated/commented SQL and must be regenerated.
+
+## Next stage (planned, not built): Silver filtration from an Excel file
+
+The next Silver capability is row-level filtration supplied via an Excel
+file (design to be discussed — no ADR yet). Facts to start from, so the
+design doesn't re-derive them:
+
+- `silver_sql_emitter.py` has **no filter support today** — it never reads
+  `plan.source_filter`/`plan.target_filter`. Those fields already exist on
+  `CanonicalValidationPlan` (Bronze uses them, baked into SQL at generation
+  time), so they are the natural extension point, not a new plan field.
+- The filter must be applied **symmetrically** to the Bronze-recompute query
+  and the Silver query (CLAUDE.md Consistency dimension), and pushed into SQL,
+  never evaluated in Python.
+- For multisource nodes, the filter has to be placed after the verbatim
+  `bronze_join_sql` (`population_scope["bronze_join_sql"]`) and qualify
+  columns by alias.
+- An Excel reader already exists for Bronze (`src/excel_batch_loader.py`,
+  `load_excel()`/`derive_row_plan()`, see the `excel-batch-ai-review-planned`
+  skill) — reuse its loading, don't write a second Excel parser.
+- The ADR 0020 `_FIVETRAN_ACTIVE` question is itself a per-node filter
+  decision; an Excel-supplied per-node filter may be the "config-driven flag"
+  that ADR is waiting for — decide the two together.
+- Record the design as a new ADR (next number after the highest in
+  `docs/decisions/`) before implementing.
+
 ## webapp/app.py Silver sub-flow
 
 Lives inside `with tab_batch:` ("Generate Batch YAML" tab), gated by a
 top-level `st.radio("Layer", ["Bronze", "Silver"], key="batch_layer_flow")`
-placed before the existing source-table-picking flow. This is a different
-widget from the pre-existing `pick_layer(key)` selectbox (which only picks
-the *output directory* for generated YAML, `bronze`/`silver`/`gold`) — the
-Silver sub-flow uses both: `batch_layer_flow` picks which subflow runs,
-`pick_layer("silver_layer_output")` still picks where the YAML lands
-(`Project/config/silver/...`).
+placed before the existing source-table-picking flow. The Silver sub-flow
+does **not** call the generic `pick_layer()` output-directory selectbox —
+its output dir is fixed to `Project/config/silver` (ADR 0022), matching the
+hardcoded `layer="silver"` in its `generate_from_plan()` call.
 
 Bronze branch (`layer_flow == "Bronze"`): the entire pre-existing
 Standard/Report-Pack flow, unchanged, just re-indented one level.
@@ -157,6 +200,8 @@ Silver branch (`layer_flow == "Silver"`), session-state keys and call sites:
   [target_column or picked]` (uses the plan's own passthrough
   `target_column` for that source column if one exists, else assumes the
   same name — this assumption is surfaced via `st.caption`, not silent).
+- When `SchemaDiff.unavailable_reason` is set (ADR 0021), an `st.warning`
+  says drift was NOT checked; this does not gate generation.
 - `st.button("Generate YAML", key="silver_generate_btn")` is disabled until
   every schema-diff column is resolved and (if applicable) the natural key is
   picked. When enabled, calls
