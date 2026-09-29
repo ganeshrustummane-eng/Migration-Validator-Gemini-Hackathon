@@ -144,8 +144,8 @@ the quality-check code at all (same as composite PKs never do).
 - **PK-less detection uses `validation_plan.identity` (ADR 0037).**
   `run_table_hybrid(..., identity=...)` (passed from `main.py`) treats the table as
   PK-less when `identity.source_primary_keys` is empty, even though generated YAML
-  carries the legacy `<first_col>_normalized` `pksourcecolumn` fallback. Without an
-  `identity` block (hand-written YAML) the old `not pksourcecolumn` rule applies.
+  carries the legacy `<first_col>_normalized` `sourcecolumn` fallback. Without an
+  `identity` block (hand-written YAML) the old `not sourcecolumn` rule applies.
   Non-hybrid `main.py` still keys on the fallback column -- unchanged.
 - **Hash hex is lower-cased at the source (ADR 0036).** `_hash_expression` wraps
   MSSQL (`LOWER(CONVERT(VARCHAR(64), HASHBYTES(...), 2))`) and Athena

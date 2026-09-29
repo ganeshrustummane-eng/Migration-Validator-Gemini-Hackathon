@@ -50,7 +50,7 @@ Per table, in YAML order (the writer emits `data_validation` first, `row_hash_va
 1. `data_validation` → `should_dispatch_hybrid` True (hybrid tables) → `tiered_runner.run_table_hybrid()` — Tier 1 streams `row_hash_validation`'s queries in 50k chunks, Tier 2 re-fetches only unresolved keys. Correct.
 2. `row_hash_validation` → passes the placeholder check (`main.py:236`) → `should_dispatch_hybrid` False (`utility.py:43`) → ordinary branch:
    - `obj.execute_query(source_query)` / `execute_query(target_query)` (`main.py:418, 426`) — **full, non-streamed** fetch of both sides into pandas.
-   - No `pksourcecolumn` in the block → falls back to `pk = "row_hash"` (`main.py:470-472`); the SQL already returns a `row_hash` column, so the **raw SQL hash string becomes the join key** (`main.py:488` branch not taken).
+   - No `sourcecolumn` in the block → falls back to `pk = "row_hash"` (`main.py:470-472`); the SQL already returns a `row_hash` column, so the **raw SQL hash string becomes the join key** (`main.py:488` branch not taken).
    - `compare_indexed_frames` → result/failed CSVs → `PASS`/`FAIL` → `local_failure_count += 1` on FAIL (`main.py:564`) → `create_summary(..., validation_type="row_hash_validation")` → `row_hash_validation_summary.csv` (`utility.py:240`).
 
 **False-failure mechanism (MSSQL, Athena).** Source hashes are uppercase hex:
@@ -190,7 +190,7 @@ designed or documented. One point is left open.**
 
 Evidence it is not a supported standalone validation:
 - Every statement of intent in the repo calls it a Tier-1 input or reserved slot (§2). None describes it as a check a user opts into.
-- No UI path writes it. The only writer is `yaml_config_writer.py:522-535`. The webapp's three `yaml.dump` paths and `excel_batch_loader.write_yaml` never emit it (grep of `webapp/app.py` finds no `row_hash_validation`). The webapp's own no-PK mode puts `pksourcecolumn: row_hash` inside `data_validation` instead (`webapp/app.py:2105-2117, 3243-3253`).
+- No UI path writes it. The only writer is `yaml_config_writer.py:522-535`. The webapp's three `yaml.dump` paths and `excel_batch_loader.write_yaml` never emit it (grep of `webapp/app.py` finds no `row_hash_validation`). The webapp's own no-PK mode puts `sourcecolumn: row_hash` inside `data_validation` instead (`webapp/app.py:2105-2117, 3243-3253`).
 - No UI flow sets `plan.row_hash` (ADR 0011:95-99, 126-131). The one code path that sets it from user intent, `build_plan_from_requirement` (`requirement_planner.py:124`), has no caller outside `src/core/__init__.py`.
 - Its output summary is never collected (`runner.py:176-187`), so a standalone result would never reach the summary UI or History. That is not a working feature.
 

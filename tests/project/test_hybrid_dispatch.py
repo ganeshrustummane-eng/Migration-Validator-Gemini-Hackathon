@@ -30,7 +30,7 @@ TABLE_CONFIG = {
         "data_validation": {
             "source": "postgresql", "sourcequery": "SELECT id, name FROM t;",
             "target": "snowflake", "targetquery": "SELECT id, name FROM T;",
-            "pksourcecolumn": "id", "pktargetcolumn": "id",
+            "sourcecolumn": "id", "targetcolumn": "id",
         },
         "validation_plan": {
             "execution_strategy": "hybrid_v1",

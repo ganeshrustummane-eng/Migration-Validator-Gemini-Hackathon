@@ -7,9 +7,9 @@
 
 - For `hybrid_v1`, the YAML's `validation_plan.identity.source_primary_keys`
   is the authoritative PK signal. An empty list means PK-less, even when
-  `pksourcecolumn` / `pktargetcolumn` carry the legacy first-column fallback.
+  `sourcecolumn` / `targetcolumn` carry the legacy first-column fallback.
 - Hand-written YAML without an `identity` block keeps today's
-  `pksourcecolumn`-based check unchanged.
+  `sourcecolumn`-based check unchanged.
 - Normal (non-hybrid) validation, the YAML writer, generated YAML files,
   PK-based hybrid and composite-PK rejection are all unchanged.
 - No YAML regeneration is needed.
@@ -35,8 +35,8 @@ validation_plan:
 In the same file, `data_validation` carries:
 
 ```yaml
-pksourcecolumn: <first_active_column>_normalized
-pktargetcolumn: <first_active_column>_normalized
+sourcecolumn: <first_active_column>_normalized
+targetcolumn: <first_active_column>_normalized
 ```
 
 The second form is a legacy fallback. Git history of
@@ -61,8 +61,8 @@ PK-less plans.
 
 ```python
 # Project/tiered_runner.py:574-576
-pk_source_col = validation_config.get("pksourcecolumn")
-pk_target_col = validation_config.get("pktargetcolumn")
+pk_source_col = validation_config.get("sourcecolumn")
+pk_target_col = validation_config.get("targetcolumn")
 is_pk_less = not pk_source_col or not pk_target_col
 ```
 
@@ -94,7 +94,7 @@ only adds a second route to the same crash.
 ```text
 validation_pipeline.py:298-299   src_pk_cols = tgt_pk_cols = []  → plan PK lists = []
 sql_query_generator.py:321-328   record_key = <hash expr> on both sides
-yaml_config_writer.py:164-167    pksourcecolumn = pktargetcolumn = "<first_col>_normalized"
+yaml_config_writer.py:164-167    sourcecolumn = targetcolumn = "<first_col>_normalized"
 yaml_config_writer.py:196-211    validation_plan.identity.source_primary_keys = []
 main.py:348-352                  _plan_block = validations["validation_plan"]; should_dispatch_hybrid → True
 main.py:374                      ADR 0033/0034 guard passes (Historical)
@@ -136,16 +136,16 @@ authoritative for whether the table has a primary key.
 
 1. When the table's `validation_plan.identity` block is present and
    `source_primary_keys` is an empty list, `run_table_hybrid` treats the table
-   as PK-less, regardless of `pksourcecolumn` / `pktargetcolumn`.
+   as PK-less, regardless of `sourcecolumn` / `targetcolumn`.
    - `source_primary_keys` is the deciding list because it is the same list
      the SQL generator uses to decide that `record_key` is the hash
      (`sql_query_generator.py:321-324`).
    - The same list drives the writer's fallback (`yaml_config_writer.py:158-167`).
 2. When the `identity` block is absent (hand-written YAML), detection falls
-   back to today's rule, `not pksourcecolumn or not pktargetcolumn`. It is
+   back to today's rule, `not sourcecolumn or not targetcolumn`. It is
    unchanged.
-3. When `identity.source_primary_keys` is non-empty, `pksourcecolumn` /
-   `pktargetcolumn` keep driving Tier 2 exactly as today.
+3. When `identity.source_primary_keys` is non-empty, `sourcecolumn` /
+   `targetcolumn` keep driving Tier 2 exactly as today.
 4. `yaml_config_writer.py` and the legacy fallback are not changed.
 
 ## Behavior
@@ -215,7 +215,7 @@ today.
 | **A**: remove the fallback globally (blank PK for PK-less) | Yes. PK-less tables move to `main.py`'s `row_hash` path: different `row_key` values and status granularity, drift warning activates, per-row Python hashing cost | Fixed: blank PK selects `is_pk_less` | Yes, every PK-less YAML | Writer change only | Changes results of existing normal PK-less validations. Must emit blank, not `"row_hash"`: `is_pk_less` treats `"row_hash"` as a real PK column |
 | **B**: suppress the fallback only when `execution_strategy == hybrid_v1` | None | Fixed for newly generated hybrid YAML | Yes, for PK-less hybrid YAML | Writer change; PK-less encoding depends on strategy | Two YAML encodings of PK-less; YAML generated before the fix still crashes |
 | **C**: new explicit PK-less marker | None, if the marker is only read by hybrid | Fixed once the marker is emitted | Yes | New plan field + writer + schema + runner | Duplicates information already in `identity.source_primary_keys`. The existing `identity.type` can't serve, because it defaults to `"primary_key"` for PK-less plans |
-| **D** (proposed): hybrid reads existing `validation_plan.identity` | None | Fixed | No | `main.py` passes the plan block; `tiered_runner` checks one list | `pksourcecolumn` remains inaccurate for PK-less YAML; readers of that key must know `identity` wins for hybrid |
+| **D** (proposed): hybrid reads existing `validation_plan.identity` | None | Fixed | No | `main.py` passes the plan block; `tiered_runner` checks one list | `sourcecolumn` remains inaccurate for PK-less YAML; readers of that key must know `identity` wins for hybrid |
 
 ## Interaction with ADR 0035
 
@@ -257,7 +257,7 @@ merged.
 
 ## Tests (to add with the implementation, not now)
 
-1. Generated PK-less shape (fallback `pksourcecolumn` + `identity.source_primary_keys: []`),
+1. Generated PK-less shape (fallback `sourcecolumn` + `identity.source_primary_keys: []`),
    identical data → `is_match=True`.
 2. Same shape, one difference → the documented PK-less `RuntimeError`, not `KeyError`.
 3. Same shape, duplicate-count mismatch (2 vs 1 identical rows) → the documented PK-less `RuntimeError`.

@@ -17,7 +17,7 @@
 - PostgreSQL, Redshift and every PK-based hybrid table are not affected by the
   casing problem.
 - An adjacent bug was found during the trace and is independent of casing.
-  Generated PK-less YAML carries a fallback `pksourcecolumn`, so any real
+  Generated PK-less YAML carries a fallback `sourcecolumn`, so any real
   difference crashes Tier 2 on every source type (see "Adjacent finding").
 
 ## 1. Context
@@ -36,7 +36,7 @@ Project/main.py::_validate_table (main.py:216)
   ├─ _row_hash_block = validations["row_hash_validation"] (main.py:349)
   ├─ should_dispatch_hybrid("data_validation", plan, row_hash_block) (utility.py:32-54)
   └─ tiered_runner.run_table_hybrid(row_hash_config=_row_hash_block, ...) (main.py:384)
-       ├─ is_pk_less = not pksourcecolumn or not pktargetcolumn (tiered_runner.py:576)
+       ├─ is_pk_less = not sourcecolumn or not targetcolumn (tiered_runner.py:576)
        ├─ Tier 1: _collect_hash_multimap(src_db, row_hash_config["sourcequery"]) (:591)
        │          _collect_hash_multimap(tgt_db, row_hash_config["targetquery"]) (:592)
        │            key_str  = str(key_val)                 (:124)  ← NO case normalization
@@ -97,9 +97,9 @@ identical logical rows, source keys = `sha256hex.upper()`, target keys =
 
 | Case | YAML shape | Tier-1 classification | Result of `run_table_hybrid` |
 |---|---|---|---|
-| A | Generator output: `pksourcecolumn: <first_col>_normalized` (see adjacent finding) | source_only=3, target_only=3, match=0 | `KeyError: 'row_key'`, raised by `compare_indexed_frames` (`row_compare.py:152`) via `tiered_runner.py:703`. Tier 2 fetches `WHERE [id_normalized] IN ('<HEX>', ...)`, gets 0 rows, and gets an empty result frame |
+| A | Generator output: `sourcecolumn: <first_col>_normalized` (see adjacent finding) | source_only=3, target_only=3, match=0 | `KeyError: 'row_key'`, raised by `compare_indexed_frames` (`row_compare.py:152`) via `tiered_runner.py:703`. Tier 2 fetches `WHERE [id_normalized] IN ('<HEX>', ...)`, gets 0 rows, and gets an empty result frame |
 | A-control | same, same casing | match=3 | `is_match=True`, 3 PASS |
-| B | Hand-written, blank `pksourcecolumn` | source_only=3, target_only=3 | `RuntimeError` "found row-hash differences on PK-less table" (`tiered_runner.py:621`) |
+| B | Hand-written, blank `sourcecolumn` | source_only=3, target_only=3 | `RuntimeError` "found row-hash differences on PK-less table" (`tiered_runner.py:621`) |
 | B-control | same, same casing | match=3 | `is_match=True`, 1 PASS row (`row_key=ALL`) |
 
 In both failing cases the exception reaches `main.py:621-633` (`except
@@ -117,7 +117,7 @@ Exception`). Only effects that the code shows are listed here:
 ## 6. Adjacent finding (not casing — separate issue, same code path)
 
 For a PK-less plan, `yaml_config_writer.write()` (`:164-167`) never emits an
-empty `pksourcecolumn`. It falls back to `<first active column>_normalized`.
+empty `sourcecolumn`. It falls back to `<first active column>_normalized`.
 The `row_hash_validation` block still uses the hash as `record_key`. At
 runtime `is_pk_less` is therefore **False**, and Tier 2 filters the first data
 column by hash strings.
@@ -145,7 +145,7 @@ can only be reached from hand-written YAML. This issue is out of scope for
 Smallest missing regression test: in `test_tiered_runner.py`, run a PK-less
 table where source rows are `(H.upper(), H.upper())` and target rows are
 `(H, H)` for the same `H`. Assert `is_match is True` with no exception. Add
-the same case using the generator's fallback `pksourcecolumn` shape.
+the same case using the generator's fallback `sourcecolumn` shape.
 
 ## Decision
 

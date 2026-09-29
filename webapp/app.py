@@ -2108,13 +2108,13 @@ with tab_batch:
                                                 "source": src_db_type,
                                                 "source_database": database,
                                                 "source_schema": schema,
-                                                "pksourcecolumn": "row_hash",
+                                                "sourcecolumn": "row_hash",
                                                 "sourcequery": _pt_sql_oneline(_pt_src_sql),
                                                 "target_table_name": tgt_table,
                                                 "target": "snowflake",
                                                 "target_database": sf_database,
                                                 "target_schema": _pt_sf_sch_override,
-                                                "pktargetcolumn": "row_hash",
+                                                "targetcolumn": "row_hash",
                                                 "targetquery": _pt_sql_oneline(_pt_tgt_sql),
                                                 "source_filter": _pt_src_filter,
                                                 "target_filter": _pt_tgt_filter or _pt_src_filter,
@@ -3415,9 +3415,9 @@ with tab_custom:
                 pk_src = [c.strip() for c in e["pk_source"].split(",") if c.strip()]
                 pk_tgt = [c.strip() for c in e["pk_target"].split(",") if c.strip()]
                 if pk_src:
-                    inner["pksourcecolumn"] = pk_src if len(pk_src) > 1 else pk_src[0]
+                    inner["sourcecolumn"] = pk_src if len(pk_src) > 1 else pk_src[0]
                 if pk_tgt:
-                    inner["pktargetcolumn"] = pk_tgt if len(pk_tgt) > 1 else pk_tgt[0]
+                    inner["targetcolumn"] = pk_tgt if len(pk_tgt) > 1 else pk_tgt[0]
             _tables_dict[vname] = {"validations": {block_type: inner}}
 
         vtype_folder = "data_validation"

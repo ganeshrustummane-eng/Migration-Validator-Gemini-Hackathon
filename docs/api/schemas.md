@@ -220,8 +220,8 @@ tables:
   customer:
     validations:
       data_validation:
-        pksourcecolumn: id_normalized
-        pktargetcolumn: ID_normalized
+        sourcecolumn: id_normalized
+        targetcolumn: ID_normalized
         source_table_name: customer
         source: postgresql
         sourcequery: |

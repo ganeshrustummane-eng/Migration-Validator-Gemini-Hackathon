@@ -151,7 +151,7 @@ def validate_expected_grain(
     """Reject duplicate rows when YAML declares one row per grain key."""
     if config.get("expected_grain") not in {"one_row_per_key", "one_row_per_driving_key"}:
         return []
-    grain_columns = config.get("grain_columns") or config.get("pksourcecolumn")
+    grain_columns = config.get("grain_columns") or config.get("sourcecolumn")
     if isinstance(grain_columns, str):
         grain_columns = [grain_columns]
     if not grain_columns:

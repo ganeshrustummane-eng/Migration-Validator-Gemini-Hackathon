@@ -99,8 +99,8 @@ class CountValidationBlock(_QueryBlock):
 class DataValidationBlock(_QueryBlock):
     """A ``data_validation`` block: normalised row-by-row comparison."""
 
-    pksourcecolumn: Optional[Any] = None   # str (single PK) or List[str] (composite)
-    pktargetcolumn: Optional[Any] = None   # str (single PK) or List[str] (composite)
+    sourcecolumn: Optional[Any] = None   # str (single PK) or List[str] (composite)
+    targetcolumn: Optional[Any] = None   # str (single PK) or List[str] (composite)
     # Custom SQL-only fields
     report_tile: Optional[str] = None
     test_case: Optional[str] = None

@@ -15,7 +15,7 @@
   "source_table": "BRONZE_EDGE.CONFORMED_RRADHAKR.DISCOUNT_LINES",
   "target_table": "DEV_EDGE_SILVER.CONFORMED_RRADHAKR.INT_DISCOUNT_LINES",
   "status": "complete",
-  "generated_at": "2026-09-28T14:30:05.502099",
+  "generated_at": "2026-09-29T11:19:56.155222",
   "generated_by": "coalesce_metadata",
   "model_used": "N/A",
   "ai_calls_made": 0,

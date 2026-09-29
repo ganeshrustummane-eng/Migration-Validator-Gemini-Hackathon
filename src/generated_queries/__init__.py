@@ -15,12 +15,12 @@ Modules
                                    data_validation:
                                      source_table_name: ...
                                      source: postgresql
-                                     pksourcecolumn: <first_col>
+                                     sourcecolumn: <first_col>
                                      sourcequery: |
                                        SELECT ...
                                      target_table_name: ...
                                      target: snowflake
-                                     pktargetcolumn: <first_col>  # source-derived alias
+                                     targetcolumn: <first_col>  # source-derived alias
                                      targetquery: |
                                        SELECT ...
   query_output_manager — Orchestrates SQL gen + YAML write + file saves

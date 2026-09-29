@@ -128,8 +128,8 @@ this skill's problem to fix.
 ## Next stage (planned, not built): Silver filtration from an Excel file
 
 The next Silver capability is row-level filtration supplied via an Excel
-file (design to be discussed — no ADR yet). Facts to start from, so the
-design doesn't re-derive them:
+file. Design proposed (not yet approved or built) in ADRs 0041–0044 — read
+those first. Facts to start from, so the design doesn't re-derive them:
 
 - `silver_sql_emitter.py` has **no filter support today** — it never reads
   `plan.source_filter`/`plan.target_filter`. Those fields already exist on

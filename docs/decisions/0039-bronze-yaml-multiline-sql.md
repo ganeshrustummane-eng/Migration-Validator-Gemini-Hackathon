@@ -36,7 +36,7 @@ unchanged: its `SELECT COUNT(*)` queries stay one line for both layers.
 - YAML generated before this change stays single-line until it is
   regenerated.
 - Related fix, found in the same pass: `write()` appended `_normalized` to
-  the PK column name for Silver too (`pksourcecolumn: UNIT_ID_normalized`),
+  the PK column name for Silver too (`sourcecolumn: UNIT_ID_normalized`),
   but Silver SQL aliases columns by their plain target name (`AS "UNIT_ID"`).
   As a result, every Silver data validation failed with a KeyError at
   `set_index`, including the existing `DISCOUNT_LINES.yaml`. The suffix is now

@@ -231,8 +231,8 @@ for validation in validation_dirs:
                 targetcolumn = validation_config.get("targetcolumn")
                 source_table_name = validation_config.get("source_table_name")
                 target_table_name = validation_config.get("target_table_name")
-                pksourcecolumn = validation_config.get("pksourcecolumn")
-                pktargetcolumn = validation_config.get("pktargetcolumn")
+                sourcecolumn = validation_config.get("sourcecolumn")
+                targetcolumn = validation_config.get("targetcolumn")
                 # Database/schema written into YAML at generation time — overrides .env
                 source_database = validation_config.get("source_database", "")
                 source_schema   = validation_config.get("source_schema", "")
@@ -476,17 +476,17 @@ for validation in validation_dirs:
                             logger.debug("Target row count: %s", target_rows)
 
                             # Fall back to row_hash when no PK configured.
-                            if not pksourcecolumn or not pktargetcolumn:
-                                pksourcecolumn = "row_hash"
-                                pktargetcolumn = "row_hash"
+                            if not sourcecolumn or not targetcolumn:
+                                sourcecolumn = "row_hash"
+                                targetcolumn = "row_hash"
 
                             # Support both scalar PK (string) and composite PK (list)
-                            if isinstance(pksourcecolumn, list):
-                                pk_src = [c.lower() for c in pksourcecolumn]
-                                pk_tgt = [c.lower() for c in pktargetcolumn]
+                            if isinstance(sourcecolumn, list):
+                                pk_src = [c.lower() for c in sourcecolumn]
+                                pk_tgt = [c.lower() for c in targetcolumn]
                             else:
-                                pk_src = pksourcecolumn.lower()
-                                pk_tgt = pktargetcolumn.lower()
+                                pk_src = sourcecolumn.lower()
+                                pk_tgt = targetcolumn.lower()
 
                             # row_hash mode: when pk is 'row_hash' but the SQL didn't
                             # produce that column, compute it in Python from the common
@@ -546,7 +546,7 @@ for validation in validation_dirs:
                                         "row_hash fallback for %s: %d SOURCE_ONLY / %d TARGET_ONLY out of %d rows — "
                                         "roughly equal counts on both sides usually means ONE un-normalized column "
                                         "is desyncing the whole row hash, not real missing rows. Configure "
-                                        "pksourcecolumn/pktargetcolumn for accurate column-level diffs.",
+                                        "sourcecolumn/targetcolumn for accurate column-level diffs.",
                                         table_name, n_source_only, n_target_only, total_rows,
                                     )
 

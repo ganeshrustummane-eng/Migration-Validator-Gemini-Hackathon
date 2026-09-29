@@ -166,8 +166,8 @@ tables:
         target_schema: PUBLIC
         targetquery: |
           SELECT id, name, email FROM DEV_DB.PUBLIC.CUSTOMER ORDER BY id
-        pksourcecolumn: id
-        pktargetcolumn: id
+        sourcecolumn: id
+        targetcolumn: id
         mismatch_threshold_pct: 0.5   # optional: tolerate up to 0.5% mismatch
 ```
 

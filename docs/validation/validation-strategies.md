@@ -75,7 +75,7 @@ ORDER BY ID;
 
 **Output config:** `config/<layer>/data_validation/<table>.yaml`
 
-**Join strategy:** Primary key join (`pksourcecolumn` / `pktargetcolumn`). Each normalized column is compared. Mismatches are recorded with source and target values.
+**Join strategy:** Primary key join (`sourcecolumn` / `targetcolumn`). Each normalized column is compared. Mismatches are recorded with source and target values.
 
 ---
 

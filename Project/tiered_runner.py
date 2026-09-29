@@ -156,7 +156,7 @@ def _validate_expected_grain_hybrid(validation_config, pk_col, src_hash, tgt_has
     if validation_config.get("expected_grain") not in {"one_row_per_key", "one_row_per_driving_key"}:
         return []
 
-    grain_columns = validation_config.get("grain_columns") or validation_config.get("pksourcecolumn")
+    grain_columns = validation_config.get("grain_columns") or validation_config.get("sourcecolumn")
     if isinstance(grain_columns, str):
         grain_columns = [grain_columns]
     grain_columns = [str(c).strip().lower() for c in (grain_columns or [])]
@@ -572,10 +572,10 @@ def run_table_hybrid(table_name, validation_name, validation_config, row_hash_co
                       source_database, source_schema, target_database, target_schema,
                       output_path, run_id, row_hash_columns=None, transformation_specs=None,
                       identity=None):
-    pk_source_col = validation_config.get("pksourcecolumn")
-    pk_target_col = validation_config.get("pktargetcolumn")
+    pk_source_col = validation_config.get("sourcecolumn")
+    pk_target_col = validation_config.get("targetcolumn")
     # ADR 0037: validation_plan.identity wins when present -- generated PK-less
-    # YAML carries a legacy first-column pksourcecolumn fallback, but its
+    # YAML carries a legacy first-column sourcecolumn fallback, but its
     # Tier-1 record_key is the row hash, so Tier 2 must never run on it.
     is_pk_less = not pk_source_col or not pk_target_col
     if isinstance(identity, dict) and "source_primary_keys" in identity:

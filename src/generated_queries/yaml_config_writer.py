@@ -25,7 +25,7 @@ tables:
         sourcequery: |
           SELECT col1_normalized, ... FROM ...;
         target_table_name: ...
-        pktargetcolumn: <first_column>   # source-derived alias, NOT the target's name
+        targetcolumn: <first_column>   # source-derived alias, NOT the target's name
         targetquery: |
           SELECT col1_normalized, ... FROM ...;
 ────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ tables:
 ────────────────────────────────────────────────────────────────
 
 Key design decisions:
-  - pksourcecolumn / pktargetcolumn only on data_validation (not needed for aggregates)
+  - sourcecolumn / targetcolumn only on data_validation (not needed for aggregates)
   - YAML literal block scalar (|) used for all multi-line queries
   - Query content is indented 10 spaces (YAML requires > 8 for nested block)
   - Only the generator header comment is stripped; all SELECT lines kept
@@ -394,10 +394,10 @@ class YAMLConfigWriter:
 
 def _pk_yaml_lines(key: str, pk) -> List[str]:
     """
-    Render a pksourcecolumn / pktargetcolumn YAML block.
+    Render a sourcecolumn / targetcolumn YAML block.
 
-    Single PK  → '        pksourcecolumn: col_normalized'
-    Composite  → '        pksourcecolumn:\n          - col1_normalized\n          - col2_normalized'
+    Single PK  → '        sourcecolumn: col_normalized'
+    Composite  → '        sourcecolumn:\n          - col1_normalized\n          - col2_normalized'
     """
     if isinstance(pk, list) and len(pk) > 1:
         lines = [f"        {key}:"]
@@ -483,7 +483,7 @@ def _build_data_yaml(
         f"        source: {source_db_type}",
         f"        source_database: {source_database}",
         f"        source_schema: {pg_schema}",
-        *_pk_yaml_lines("pksourcecolumn", src_pk),
+        *_pk_yaml_lines("sourcecolumn", src_pk),
         f"        source_audit_column: {source_audit_column}",
         "        sourcequery: |",
         data_source_yaml,
@@ -491,7 +491,7 @@ def _build_data_yaml(
         "        target: snowflake",
         f"        target_database: {sf_database}",
         f"        target_schema: {sf_schema}",
-        *_pk_yaml_lines("pktargetcolumn", tgt_pk),
+        *_pk_yaml_lines("targetcolumn", tgt_pk),
         f"        target_audit_column: {target_audit_column}",
         "        targetquery: |",
         data_target_yaml,

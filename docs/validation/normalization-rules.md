@@ -44,8 +44,8 @@ This converts NULL to the literal string `'<<NULL>>'`, enabling NULL values to p
 Primary key columns are also normalized (to enable the row-level join):
 
 ```yaml
-pksourcecolumn: id_normalized
-pktargetcolumn: ID_normalized
+sourcecolumn: id_normalized
+targetcolumn: ID_normalized
 ```
 
 The PK is cast to text using the same normalization, then used as the join key in row comparison.

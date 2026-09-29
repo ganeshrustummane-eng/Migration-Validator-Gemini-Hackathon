@@ -122,8 +122,8 @@ def test_hybrid_matches_untiered_oracle_on_row_level_status():
     oracle = _oracle_result(source_full, target_full).set_index("row_key")["status"].to_dict()
 
     validation_config = {
-        "pksourcecolumn": "id",
-        "pktargetcolumn": "id",
+        "sourcecolumn": "id",
+        "targetcolumn": "id",
         "sourcequery": "SELECT id, name FROM source_t",
         "targetquery": "SELECT id, name FROM target_t",
     }
@@ -173,7 +173,7 @@ def test_duplicate_key_count_mismatch_produces_fail_not_silent_pass():
     tgt_db = _FakeDB(target_full, target_hash_rows)
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name FROM source_t",
         "targetquery": "SELECT id, name FROM target_t",
     }
@@ -203,7 +203,7 @@ def test_duplicate_key_count_mismatch_produces_fail_not_silent_pass():
 
 
 def test_pk_less_duplicate_rows_matching_count_passes():
-    """PK-less scalability edge case: no pksourcecolumn/pktargetcolumn
+    """PK-less scalability edge case: no sourcecolumn/targetcolumn
     configured, so record_key falls back to the content hash itself
     (sql_query_generator._row_hash_queries). Two physically identical rows
     on each side hash to the same key, appearing as a 2-entry list on both
@@ -275,7 +275,7 @@ def test_pk_less_duplicate_count_mismatch_refuses_rather_than_guessing():
 
 def _run_generated_pk_less(src_hash_rows, tgt_hash_rows, identity, expect_tier2=False):
     """ADR 0037: generated PK-less YAML shape -- legacy first-column
-    pksourcecolumn fallback, record_key = the row hash. Spies on Tier 2
+    sourcecolumn fallback, record_key = the row hash. Spies on Tier 2
     (_fetch_batch) and asserts whether it ran, even when the run raises."""
     with patch("tiered_runner._fetch_batch", wraps=tiered_runner._fetch_batch) as tier2:
         try:
@@ -288,7 +288,7 @@ def _run_generated_pk_less_inner(src_hash_rows, tgt_hash_rows, identity):
     src_db = _FakeDB(pd.DataFrame({"a": [1]}), src_hash_rows)
     tgt_db = _FakeDB(pd.DataFrame({"a": [1]}), tgt_hash_rows)
     validation_config = {
-        "pksourcecolumn": "a_normalized", "pktargetcolumn": "a_normalized",
+        "sourcecolumn": "a_normalized", "targetcolumn": "a_normalized",
         "sourcequery": "SELECT a FROM source_t", "targetquery": "SELECT a FROM target_t",
     }
     row_hash_config = {
@@ -326,7 +326,7 @@ def test_generated_pk_less_difference_refuses_not_keyerror():
 
 
 def test_hand_written_yaml_without_identity_keeps_old_pk_rule():
-    """No identity block -> pksourcecolumn still decides (not PK-less), so a
+    """No identity block -> sourcecolumn still decides (not PK-less), so a
     difference goes to Tier 2 exactly as before, never the PK-less refusal."""
     with pytest.raises(Exception) as exc_info:
         _run_generated_pk_less([("h1", "h1")], [("h2", "h2")], identity=None, expect_tier2=True)
@@ -342,7 +342,7 @@ def test_pk_based_hybrid_with_identity_unchanged():
          patch("tiered_runner.get_database", side_effect=[src_db, tgt_db]):
         tiered_runner.run_table_hybrid(
             table_name="fixture_table", validation_name="data_validation",
-            validation_config={"pksourcecolumn": "id", "pktargetcolumn": "id",
+            validation_config={"sourcecolumn": "id", "targetcolumn": "id",
                                "sourcequery": "SELECT id, name FROM source_t",
                                "targetquery": "SELECT id, name FROM target_t"},
             row_hash_config={"sourcequery": "SELECT id AS record_key, h AS row_hash FROM source_t",
@@ -360,7 +360,7 @@ def test_composite_pk_with_identity_still_rejected():
     with pytest.raises(NotImplementedError, match="composite"):
         tiered_runner.run_table_hybrid(
             table_name="t", validation_name="data_validation",
-            validation_config={"pksourcecolumn": ["a", "b"], "pktargetcolumn": ["a", "b"]},
+            validation_config={"sourcecolumn": ["a", "b"], "targetcolumn": ["a", "b"]},
             row_hash_config={}, source="postgresql", target="snowflake",
             environment="local", base_dir=".", source_database="", source_schema="",
             target_database="", target_schema="", output_path=".", run_id="test",
@@ -382,7 +382,7 @@ def test_incomplete_row_hash_coverage_refuses_rather_than_silently_passing():
     tgt_db = _FakeDB(target_full, hash_rows)
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name, amount FROM source_t",
         "targetquery": "SELECT id, name, amount FROM target_t",
     }
@@ -420,7 +420,7 @@ def test_hash_match_bucket_is_batched_not_built_as_one_unbounded_frame():
     tgt_db = _FakeDB(target_full, hash_rows)
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name FROM source_t",
         "targetquery": "SELECT id, name FROM target_t",
     }
@@ -486,7 +486,7 @@ def test_transformation_specs_propagate_through_tier2_batches():
     oracle_by_key = oracle.set_index(oracle["row_key"].astype(str))
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name, amt_value FROM source_t",
         "targetquery": "SELECT id, name, amt_value FROM target_t",
     }
@@ -543,7 +543,7 @@ def test_hash_match_and_tier2_rows_share_transformation_columns():
     transformation_specs = [{"name": "amt"}]
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name, amt_value FROM source_t",
         "targetquery": "SELECT id, name, amt_value FROM target_t",
     }
@@ -592,7 +592,7 @@ def test_default_empty_transformation_specs_unchanged():
     tgt_db = _FakeDB(target_full, hash_rows_tgt)
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name FROM source_t",
         "targetquery": "SELECT id, name FROM target_t",
     }
@@ -673,7 +673,7 @@ def test_expected_grain_source_target_duplicate_mismatch_fails_like_oracle():
     tgt_db = _FakeDB(target_full, target_hash_rows)
 
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": "SELECT id, name FROM source_t",
         "targetquery": "SELECT id, name FROM target_t",
         "expected_grain": "one_row_per_key",
@@ -1004,7 +1004,7 @@ def _quality_fixture(source_full, target_full, hash_rows_src, hash_rows_tgt, qua
     src_db = _FakeDB(source_full, hash_rows_src)
     tgt_db = _FakeDB(target_full, hash_rows_tgt)
     validation_config = {
-        "pksourcecolumn": "id", "pktargetcolumn": "id",
+        "sourcecolumn": "id", "targetcolumn": "id",
         "sourcequery": f"SELECT {sourcecols} FROM source_t",
         "targetquery": f"SELECT {sourcecols} FROM target_t",
         "quality_checks": quality_checks_config,

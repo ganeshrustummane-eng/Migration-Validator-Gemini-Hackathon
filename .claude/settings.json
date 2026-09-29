@@ -3,7 +3,7 @@
     "allow": [
       "PowerShell(python -m pytest Project/test_tiered_runner.py Project/test_hybrid_dispatch.py -q 2>&1)",
       "PowerShell(python src/generated_queries/test_sql_query_generator.py 2>&1)",
-      "PowerShell(Remove-Item \"docs\\\\decisions\\\\0037-pk-less-fallback-pksourcecolumn-breaks-hybrid-tier2.md\" -Confirm:$false)",
+      "PowerShell(Remove-Item \"docs\\\\decisions\\\\0037-pk-less-fallback-sourcecolumn-breaks-hybrid-tier2.md\" -Confirm:$false)",
       "PowerShell(python -m pytest Project/test_tiered_runner.py Project/test_hybrid_dispatch.py Project/test_incremental_mode.py -q 2>&1)",
       "PowerShell(python -m pytest src/generated_queries/test_sql_query_generator.py -q 2>&1)",
       "PowerShell(python -m pytest src/validation/test_execution_strategy.py -q 2>&1)",
