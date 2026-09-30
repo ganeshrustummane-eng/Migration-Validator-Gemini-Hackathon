@@ -1,6 +1,6 @@
 ---
 name: excel-batch-ai-review-planned
-description: "Backend and UI for the Excel batch AI-preview feature are now implemented. Header-classification and filter-explain AI methods live on AISQLQueryGenerator (src/generated_queries/ai_sql_generator.py); load_excel()/derive_row_plan() in src/excel_batch_loader.py derive a per-row plan (tables, grain, filter SQL + English, join_needed). webapp/app.py:2408-2681 wires these into the 'Report Pack (AI Preview)' radio branch with a batch grid, per-row drill-down, and generate button."
+description: "Backend and UI for the Excel batch AI-preview feature are now implemented. Header-classification and filter-explain AI methods live on AISQLQueryGenerator (src/generated_queries/ai_sql_generator.py); load_excel()/derive_row_plan() in src/excel_batch_loader.py derive a per-row plan (tables, grain, filter SQL + English, join_needed). webapp/views/generate_yamls.py wires these into the Bronze 'Report Pack (Excel)' radio branch with a batch grid, per-row drill-down, and generate button."
 ---
 
 # Excel-upload batch YAML generation with AI preview
@@ -25,7 +25,7 @@ The backend pieces are built and self-checked:
   `candidate_keys: Optional[List[List[str]]] = None` param, threaded into the
   existing (previously always-empty) `CanonicalValidationPlan.candidate_keys` field.
 
-**UI status**: `webapp/app.py:2408-2681` implements the "AI Preview" radio
+**UI status**: `webapp/views/generate_yamls.py` (Bronze, "📊 Report Pack (Excel)" branch) implements the "AI Preview" radio
 branch, batch grid, per-row drill-down, and generate button described below.
 
 For the plain "no AI" flow still used by today's UI, see the
@@ -36,7 +36,7 @@ was added.
 ## Resolved design decisions
 
 1. UI: a third radio option next to "Standard"/"Report Pack (Excel)" --
-   "Report Pack (AI Preview)" -- implemented at `webapp/app.py:2408-2681`.
+   "Report Pack (AI Preview)" -- implemented in `webapp/views/generate_yamls.py`.
 2. Single-table rows route through `src/validation_pipeline.py`'s
    `run_with_plan()` (base rules -> learned rules -> AI-only-for-ambiguous),
    passing `derive_row_plan()`'s `grain_columns` as `candidate_keys`.

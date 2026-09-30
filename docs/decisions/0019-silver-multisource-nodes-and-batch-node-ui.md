@@ -1,6 +1,6 @@
 # 0019. Support `isMultisource` Coalesce nodes and a Streamlit batch-node UI
 
-**Status:** Accepted
+**Status:** Accepted; the UNION shape (every sourceMapping starting with FROM) is handled by [0049](0049-silver-multi-source-union-nodes.md)
 **Date:** 2026-09-24
 **Follows on from:** [0014](0014-coalesce-metadata-extraction-rules.md) (declared `isMultisource=true` out of
 scope), [0018](0018-silver-sql-verbatim-transform-no-generic-normalization.md) (verbatim-transform

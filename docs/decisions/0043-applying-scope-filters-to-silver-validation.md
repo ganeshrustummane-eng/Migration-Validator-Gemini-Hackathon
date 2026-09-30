@@ -1,6 +1,6 @@
 # 0043. Applying the Bronze scope filters to Silver validation
 
-**Status:** Proposed — awaiting review, nothing implemented
+**Status:** Implemented with changes — see [0045](0045-scope-filters-implemented-bronze-and-silver.md) (§2 replaced: Silver parents are `INT_<PARENT>` with `IS_CURRENT`)
 **Date:** 2026-09-28
 **Follows on from:** [0042](0042-declarative-scope-filter-spec-rendered-per-layer.md)
 **Related:** [0019](0019-silver-multisource-nodes-and-batch-node-ui.md) (multisource), [0020](0020-silver-fivetran-active-filter-open-question.md) (`_FIVETRAN_ACTIVE`), [0026](0026-validation-plan-metadata-block-in-silver-yaml.md)

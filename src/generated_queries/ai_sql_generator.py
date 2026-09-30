@@ -748,6 +748,71 @@ INSERT, UPDATE, DELETE, DROP, or any statement other than a boolean expression.
 
         return {"filter_sql": filter_sql, "filter_english": filter_english, "warnings": warnings}
 
+    def interpret_scope_filter(
+        self,
+        table: str,
+        description: str,
+        known_values: Optional[List[str]] = None,
+        columns: Optional[dict] = None,
+    ) -> dict:
+        """Rewrite a workbook filter cell (plain English or rough SQL) as ONE
+        statement: SELECT COUNT(*) FROM <table> j JOIN <parent> <alias> ON .. WHERE ..
+        (ADR 0046). The caller parses it with scope_filter.from_ai_sql() and a
+        human reviews it -- this never produces the per-layer SQL itself.
+
+        Returns {"sql": str, "warnings": List[str]}; never raises (sql == ""
+        on any failure, with the reason in warnings).
+        """
+        text = (description or "").strip()
+        if not text:
+            return {"sql": "", "warnings": ["Filter cell is empty."]}
+        try:
+            self._check_instruction_safety(text)
+        except AISQLGenerationError as exc:
+            return {"sql": "", "warnings": [str(exc)]}
+        if not self._ai_active:
+            return {"sql": "", "warnings": ["No AI API key configured (DIAL_API_KEY or CLAUDE_API_KEY)."]}
+
+        context = ""
+        if known_values:
+            context += f"\nValues given elsewhere in the workbook (use them if the text names the column but no values): {known_values}"
+        if columns:
+            context += "\nKnown columns per table (use these exact names; do not invent others):\n" + json.dumps(columns)
+        messages = [
+            {"role": "system", "content": (
+                "You turn a tester's note about which rows of a table to validate into one SQL "
+                "statement. Output ONLY the SQL, no markdown, no explanation."
+            )},
+            {"role": "user", "content": f"""Table: {table}
+Tester's note:
+\"\"\"{text}\"\"\"
+{context}
+
+Write exactly one statement of this shape:
+SELECT COUNT(*) FROM {table} j
+JOIN <parent_table> <alias> ON <previous_alias>.<column> = <alias>.<column>
+... (one JOIN per step the note describes, each joining from the previous table, INNER JOIN only)
+WHERE <alias>.<column> <op> <value> AND ...
+
+Rules:
+- Only tables, columns and values the note or the lists above mention. Never guess values.
+- Every column in ON/WHERE is qualified with its alias. Operators: = != <> > >= < <= IN NOT IN.
+- If the note says to compare the whole table, output exactly: FULL
+- If the note is too unclear to write this safely, output exactly: UNCLEAR"""},
+        ]
+        try:
+            raw = self._call_ai(messages, f"scope_filter:{table}", 1).strip()
+        except AISQLGenerationError as exc:
+            return {"sql": "", "warnings": [str(exc)]}
+        sql = "\n".join(l for l in raw.splitlines() if not l.strip().startswith("```")).strip().rstrip(";")
+        if sql.upper() == "UNCLEAR":
+            return {"sql": "", "warnings": ["AI could not interpret this note -- write the joins manually."]}
+        if sql.upper() == "FULL":
+            return {"sql": "compare full", "warnings": []}
+        if self._DESTRUCTIVE_INSTRUCTION_RE.search(sql) or ";" in sql:
+            return {"sql": "", "warnings": ["AI output contained a forbidden keyword -- discarded."]}
+        return {"sql": sql, "warnings": []}
+
     _INJECTION_MARKERS = (
         "ignore previous instructions",
         "ignore the above",

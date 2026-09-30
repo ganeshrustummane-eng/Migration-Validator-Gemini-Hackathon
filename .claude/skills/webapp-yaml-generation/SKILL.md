@@ -1,6 +1,6 @@
 ---
 name: webapp-yaml-generation
-description: "Use when webapp/app.py needs to write a validation YAML config directly from the UI (Generate Single YAML 'prompt' tab, the reference/filter/join 'RPJ' tab, or the Custom YAML manual editor), or when working on src/excel_batch_loader.py's Excel-upload batch YAML path. Covers the fact that these are INDEPENDENT yaml.dump code paths, separate from the backend src/generated_queries/yaml_config_writer.py generator. Files: webapp/app.py, src/excel_batch_loader.py."
+description: "Use when the Streamlit UI writes a validation YAML config directly (the Bronze JOIN-rules branch in webapp/views/generate_yamls.py, or the Custom SQL tab in webapp/views/custom_sql.py), or when working on src/excel_batch_loader.py's Excel-upload batch YAML path. Covers the fact that these are INDEPENDENT yaml.dump code paths, separate from the backend src/generated_queries/yaml_config_writer.py generator. Files: webapp/views/generate_yamls.py, webapp/views/custom_sql.py, src/excel_batch_loader.py."
 ---
 
 # Webapp-side YAML generation (independent of the backend generator)
@@ -25,6 +25,8 @@ exclusion YAMLs: known, real, duplicated-but-intentional-for-now. Do not consoli
 these paths into `yaml_config_writer.py` without the user explicitly asking for that
 — it's a bigger refactor than a normal skill/agent task, and the schemas the three
 paths produce are not identical today.
+
+> **Current state (ADR 0050):** the UI is split into `webapp/views/`. Two direct `yaml.dump()` generation paths remain: the Bronze JOIN-rules branch in `views/generate_yamls.py` and the Custom SQL tab in `views/custom_sql.py`. The "prompt" and "RPJ" tabs described below no longer exist as separate tabs — verify before relying on Paths 1–2. (`views/run_validation.py` also rewrites YAMLs, but only to inject run thresholds.)
 
 ## Path 1 -- `webapp/app.py`, "prompt" YAML (Generate Single YAML tab)
 

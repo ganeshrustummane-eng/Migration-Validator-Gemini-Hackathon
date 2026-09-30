@@ -135,11 +135,45 @@ BAD_OVERRIDE_SQL_NODE = {
     "metadata": {"isMultisource": False, "overrideSQL": True, "sourceMapping": []},
 }
 
+# ADR 0049: two Bronze sources landing in one Silver table. Each sourceMapping
+# has its own FROM; each column has one source per mapping (same order).
+UNION_NODE_ID = "int-union-node-id"
+UNION_NODE = {
+    "database": "SILVER_EDGE", "schema": "S", "name": "INT_SITES_ALL",
+    "config": {"insertStrategy": "UNION ALL"},
+    "metadata": {
+        "isMultisource": True, "overrideSQL": False, "customSQL": False,
+        "sourceMapping": [
+            {"name": "FROM_PG", "aliases": {"FACILITIES": UPSTREAM_NODE_ID},
+             "dependencies": [{"nodeID": UPSTREAM_NODE_ID, "nodeName": "FACILITIES", "locationName": "BRONZE_EDGE"}],
+             "join": {"joinCondition": "FROM {{ ref('BRONZE_EDGE', 'FACILITIES') }} \"FACILITIES\""}},
+            {"name": "FROM_SL", "aliases": {"COMPANIES": UPSTREAM_NODE_ID_2},
+             "dependencies": [{"nodeID": UPSTREAM_NODE_ID_2, "nodeName": "COMPANIES", "locationName": "BRONZE_SL"}],
+             "join": {"joinCondition": "FROM {{ ref('BRONZE_SL', 'COMPANIES') }} \"COMPANIES\""}},
+        ],
+        "columns": [
+            {"name": "SITE_NAME", "dataType": "VARCHAR", "sources": [
+                {"transform": "", "columnReferences": [{"nodeID": UPSTREAM_NODE_ID, "columnID": "col-facility-id"}]},
+                {"transform": "", "columnReferences": [{"nodeID": UPSTREAM_NODE_ID_2, "columnID": "col-company-name"}]},
+            ]},
+            {"name": "SOURCE_SYSTEM", "dataType": "VARCHAR", "sources": [
+                {"transform": "'PG'", "columnReferences": []},
+                {"transform": "'SL'", "columnReferences": []},
+            ]},
+            # Only the first source declares it -> can't be compared, not guessed.
+            {"name": "PG_ONLY", "dataType": "VARCHAR", "sources": [
+                {"transform": "", "columnReferences": [{"nodeID": UPSTREAM_NODE_ID, "columnID": "col-facility-id"}]},
+            ]},
+        ],
+    },
+}
+
 NODES_BY_ID = {
     UPSTREAM_NODE_ID: UPSTREAM_NODE,
     SILVER_NODE_ID: SILVER_NODE,
     UPSTREAM_NODE_ID_2: UPSTREAM_NODE_2,
     MULTI_NODE_ID: MULTI_NODE,
+    UNION_NODE_ID: UNION_NODE,
 }
 
 
@@ -284,7 +318,11 @@ def test_multisource_emit_query_set_wraps_and_resolves_join():
         'ON "FACILITIES"."COMPANY_ID" = "COMPANIES"."ID"'
     ) in query_set.main_validation_source
     # Row-count queries stay unwrapped -- no column to wrap, just COUNT(*).
-    assert "COALESCE" not in query_set.row_count_source
+    # ADR 0045: every Bronze table read is filtered to active rows; the joined
+    # one tolerates an unmatched (NULL) join row.
+    assert "COALESCE(CAST" not in query_set.row_count_source
+    assert 'WHERE "FACILITIES"."_FIVETRAN_ACTIVE" = TRUE' in query_set.row_count_source
+    assert 'COALESCE("COMPANIES"."_FIVETRAN_ACTIVE", TRUE) = TRUE' in query_set.row_count_source
     assert "COALESCE" not in query_set.row_count_target
 
 
@@ -354,7 +392,9 @@ def test_sql_emitter_literal_text():
         'SELECT\n'
         '    COALESCE(CAST("FACILITIES"."ID" AS STRING), \'<<NULL>>\') AS "FACILITY_ID",\n'
         '    COALESCE(CAST(ROW_NUMBER() OVER (PARTITION BY "FACILITIES"."ID" ORDER BY "FACILITIES"."UPDATED_AT") AS STRING), \'<<NULL>>\') AS "SYS_VERSION"\n'
-        'FROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"'
+        'FROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"\n'
+        # ADR 0045: active-row filter after the SYS_VERSION window, not before it.
+        'QUALIFY "FACILITIES"."_FIVETRAN_ACTIVE" = TRUE'
     )
     expected_target = (
         'SELECT\n'
@@ -370,7 +410,12 @@ def test_sql_emitter_literal_text():
     assert "<<NULL>>" in query_set.main_validation_source
     assert "SYS_CREATE_DATE" not in query_set.main_validation_source
     # Row-count queries are COUNT(*) with no column to wrap -- unwrapped (ADR 0027 scope).
-    assert query_set.row_count_source == 'SELECT COUNT(*) AS count\nFROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"'
+    assert query_set.row_count_source == (
+        'SELECT COUNT(*) AS count\nFROM "BRONZE_EDGE"."CONFORMED_RRADHAKR"."FACILITIES"\n'
+        'WHERE "FACILITIES"."_FIVETRAN_ACTIVE" = TRUE'
+    )
+    # Fixture has no IS_CURRENT column -> Silver side unfiltered, and flagged.
+    assert any("no IS_CURRENT" in r for r in plan.review_reasons)
     assert query_set.row_count_target == (
         'SELECT COUNT(*) AS count FROM "SILVER_EDGE"."CONFORMED_RRADHAKR"."INT_FACILITIES"'
     )
@@ -388,3 +433,34 @@ if __name__ == "__main__":
                 print("FAIL  %s: %s" % (name, exc))
     print("\n%d failure(s)" % failures)
     sys.exit(1 if failures else 0)
+
+
+def test_union_node_two_bronze_sources_into_one_silver_table():
+    """ADR 0049: each source mapping becomes its own SELECT with its own
+    expressions and _FIVETRAN_ACTIVE filter, combined with the node's UNION ALL;
+    the count query counts the combined rows."""
+    plan, _ = _run_build_plan(UNION_NODE_ID)
+    by_name = {m.target_column: m for m in plan.mappings}
+    assert by_name["PG_ONLY"].skip_validation and "union branch 2" in by_name["PG_ONLY"].skip_reason
+    assert plan.population_scope["union_strategy"] == "UNION ALL"
+    assert "bronze_join_sql" not in plan.population_scope
+    assert any("tells the sources apart" in r for r in plan.review_reasons)
+
+    qs = emit_query_set(plan)
+    branch_1, branch_2 = qs.main_validation_source.split("\nUNION ALL\n")
+    assert 'COALESCE(CAST("FACILITIES"."ID" AS STRING), \'<<NULL>>\') AS "SITE_NAME"' in branch_1
+    assert "COALESCE(CAST('PG' AS STRING), '<<NULL>>') AS \"SOURCE_SYSTEM\"" in branch_1
+    assert branch_1.endswith('FROM "BRONZE_EDGE"."S"."FACILITIES" "FACILITIES"\nWHERE "FACILITIES"."_FIVETRAN_ACTIVE" = TRUE')
+    assert 'COALESCE(CAST("COMPANIES"."NAME" AS STRING), \'<<NULL>>\') AS "SITE_NAME"' in branch_2
+    assert branch_2.endswith('FROM "BRONZE_SL"."S"."COMPANIES" "COMPANIES"\nWHERE "COMPANIES"."_FIVETRAN_ACTIVE" = TRUE')
+    assert "PG_ONLY" not in qs.main_validation_source
+    assert qs.row_count_source == f"SELECT COUNT(*) AS count FROM (\n{qs.main_validation_source}\n)"
+    assert qs.main_validation_target.endswith('FROM "SILVER_EDGE"."S"."INT_SITES_ALL"')
+
+
+def test_union_strategy_unknown_is_flagged_not_guessed_silently():
+    from silver.coalesce_plan_builder import _union_strategy
+    assert _union_strategy({"config": {"insertStrategy": "UNION"}}) == ("UNION", None)
+    assert _union_strategy({"config": {"insertStrategy": "INSERT"}}) == ("UNION ALL", None)
+    op, note = _union_strategy({})
+    assert op == "UNION ALL" and "confirm in Coalesce" in note

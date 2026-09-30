@@ -1,6 +1,6 @@
 # 0044. Do we need AI to interpret the filter workbooks? Not now: deterministic first, AI later as a reviewed proposer only
 
-**Status:** Proposed — recommendation for review
+**Status:** Accepted — implemented in [0045](0045-scope-filters-implemented-bronze-and-silver.md)
 **Date:** 2026-09-28
 **Follows on from:** [0041](0041-what-the-bronze-filter-workbooks-tell-us.md), [0042](0042-declarative-scope-filter-spec-rendered-per-layer.md)
 **Related:** [0003](0003-ai-usage-yaml-generation-vs-run-validation.md) (AI only at generation, never at run)

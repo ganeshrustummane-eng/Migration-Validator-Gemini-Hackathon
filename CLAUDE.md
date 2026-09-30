@@ -27,7 +27,7 @@ are not interchangeable:
    does not generate one, and it fails or silently no-ops if the YAML for that
    table doesn't exist yet.
 
-The webapp's own Guide tab (`webapp/app.py`, `tab_guide`) states this order
+The webapp's own Guide tab (`webapp/views/guide.py`) states this order
 canonically: Connect → Exclusions → Generate YAML → Review & Approve → Run
 Validation. Treat that as ground truth for the sequence.
 
@@ -146,8 +146,8 @@ values and ignore the difference.
 
 ## Where things actually live (post-cleanup, current as of this session)
 
-- **UI**: `webapp/app.py` — single-file Streamlit app. Thin wrapper only; no
-  validation logic lives here. The "Generate Batch YAML" tab (`tab_batch`)
+- **UI**: `webapp/app.py` (~100 lines: page config, theme, sidebar, `st.tabs`, one `<view>.render()` per tab), `webapp/ui_common.py` (shared helpers/caches/constants, star-imported by every view), `webapp/ui_theme.py` (CSS `apply()`), `webapp/sidebar.py`, and `webapp/views/<tab>.py` (`generate_yamls` = Bronze + Silver, `custom_sql`, `run_validation`, `history`, `rule_book`, `exclusions`, `jira`, `usage`, `guide`, `output_files`) — ADR 0050. Thin wrapper only; no
+  validation logic lives here. The "Generate YAMLs" tab (`views/generate_yamls.py`)
   starts with a `Bronze`/`Silver` radio (`batch_layer_flow`, distinct from the
   existing per-flow `pick_layer()` output-directory selectbox further down):
   choosing Bronze runs the existing source-DB-to-Snowflake mapping flow
@@ -174,12 +174,22 @@ values and ignore the difference.
   wrapper (ADR 0027), omits macro/non-deterministic columns with no SQL
   comments, and Silver YAML stays multi-line (ADR 0023). See
   `docs/decisions/0013-0027` and the `silver-layer-coalesce-validation` skill.
-  Open: `_FIVETRAN_ACTIVE` on the Bronze-recompute side (ADR 0020).
-- **Next stage (planned, not built): Silver filtration via Excel.** Row
-  filters for Silver nodes will come from an Excel file; the design is still
-  to be discussed. `silver_sql_emitter.py` has no filter support yet. Start
-  from the "Next stage" section of the `silver-layer-coalesce-validation`
-  skill and record the design as a new ADR before any code.
+- **Scope filters from the filter workbooks (ADR 0041-0045), Bronze and
+  Silver.** `src/scope_filter.py` parses each workbook row (SQL or prose)
+  once and renders it as JOINs (ADR 0046): real JOINs in Silver, and in
+  Bronze the same JOIN chain inside one `IN (SELECT ..)`, because Bronze's
+  AI-written SELECTs use unqualified columns. Prose rows can be read by AI
+  (`AISQLQueryGenerator.interpret_scope_filter()`, DIAL or Claude) into
+  the same editable grid; a human always reviews the result. The UI
+  (`pick_scope_workbook()`/`edit_scope_filter()` in `webapp/ui_common.py`, used in
+  Bronze step 6 and in each Silver node) picks a workbook from
+  `docs/Excel-Files/` and lets people edit the join path.
+  - Bronze Snowflake adds `_FIVETRAN_ACTIVE = TRUE` on every parent table.
+  - Silver always filters Bronze `_FIVETRAN_ACTIVE = TRUE` (in `QUALIFY`
+    when `SYS_VERSION` is windowed) and Silver `IS_CURRENT = TRUE`, with
+    parents read as `INT_<PARENT>`.
+  - A row that doesn't parse, or a column that isn't there, blocks
+    generation instead of being guessed.
 - **Bronze schema validation** (ADR 0024/0025): `render_mapping_review()`'s
   schema-validation section (column counts, missing/extra/type-mismatch,
   "Mark OK" → `config/bronze_schema_exclusions.yaml`). Advisory, not a gate.
@@ -253,11 +263,13 @@ values and ignore the difference.
   avoid clobbering the other's key. `docs/rules/rule-book.md`'s described
   lifecycle (approval roles, version store) does not match this code — treat
   that doc as stale/aspirational.
-- **Webapp's own YAML-writing paths**: `webapp/app.py` contains three direct
-  `yaml.dump()` call sites (the "prompt" single-table tab, the reference/
-  filter/join "RPJ" tab, and the custom-YAML manual editor), and
+- **Webapp's own YAML-writing paths**: two direct `yaml.dump()` generation
+  paths remain after ADR 0050's split — the Bronze JOIN-rules branch in
+  `webapp/views/generate_yamls.py` and the Custom SQL tab
+  (`webapp/views/custom_sql.py`); the older "prompt" and "RPJ" tabs are gone
+  (`views/run_validation.py` only injects run thresholds into existing YAMLs), and
   `src/excel_batch_loader.py` has its own `write_yaml()` for the Excel-upload
-  batch flow. None of these four call into
+  batch flow. None of these call into
   `src/generated_queries/yaml_config_writer.py` (the backend generator used by
   `src/validation_pipeline.py`) — they're independent, real, intentional-for-now
   duplication, same treatment as the 5 exclusion YAMLs above. Don't consolidate
@@ -312,8 +324,8 @@ divergence found once already); don't treat `.github/` as ground truth.
 - `webapp-yaml-generation` — the webapp's own independent YAML-writing paths.
 - `excel-batch-ai-review-planned` — Excel-upload batch AI preview (Bronze),
   now implemented (`load_excel()`/`derive_row_plan()` in `src/excel_batch_loader.py`);
-  the skill name is historical. Reuse its Excel loading for the planned Silver
-  Excel filtration.
+  the skill name is historical. (Filter workbooks use `src/scope_filter.py`, not
+  `load_excel()`: see ADR 0045.)
 - `data-comparison-report` — the one comparison engine, execution modes
   (incremental, integrity_check, report pack, hybrid) and CSV report format.
 - `connector-postgresql`, `connector-mssql-sitelink`, `connector-athena`,

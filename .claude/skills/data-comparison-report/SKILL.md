@@ -23,7 +23,7 @@ unrelated and still live -- imported directly by `webapp/app.py`,
 
 ## Engine -- row-level (`Project/main.py` + `Project/runner.py` + `Project/db/*.py`)
 
-This is what the webapp's "Run Validation" button calls: `webapp/app.py`'s Run
+This is what the webapp's "Run Validation" button calls: `webapp/views/run_validation.py`'s Run
 Validation tab -> `Project/runner.py`'s `run_validation(layer, environment, tables,
 count_validation, data_validation, timeout=900)` -> builds a `subprocess.run([...,
 "main.py", "--layer_type", ..., "--tables", ..., "--count_validation", "yes"/"no",

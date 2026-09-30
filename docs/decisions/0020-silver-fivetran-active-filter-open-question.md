@@ -1,6 +1,6 @@
 # 0020. Whether Silver's Bronze-recompute SQL should filter `_FIVETRAN_ACTIVE = TRUE`
 
-**Status:** Investigation only — awaiting user/product decision before any code change
+**Status:** Resolved by [0045](0045-scope-filters-implemented-bronze-and-silver.md): both sides filtered (Bronze `_FIVETRAN_ACTIVE`, Silver `IS_CURRENT`), active filter applied after the `SYS_VERSION` window
 **Date:** 2026-09-24
 **Follows on from:** [0018](0018-silver-sql-verbatim-transform-no-generic-normalization.md), [0019](0019-silver-multisource-nodes-and-batch-node-ui.md)
 

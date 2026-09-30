@@ -96,14 +96,109 @@ def _bronze_from_clause(plan: "CanonicalValidationPlan") -> str:
     return f'FROM "{plan.source_database}"."{plan.source_schema}"."{plan.source_table}"'
 
 
+_TABLE_REF_RE = re.compile(r'"[^"]+"\."[^"]+"\."([^"]+)"(?:\s+(?:AS\s+)?"([^"]+)")?', re.I)
+_WINDOW_RE = re.compile(r"\bOVER\s*\(", re.I)
+
+
+def bronze_aliases(plan: "CanonicalValidationPlan") -> List[str]:
+    """Alias (or table name) of every Bronze table the recompute query reads,
+    driving table first. Single-source: just plan.source_table."""
+    join_sql = (plan.population_scope or {}).get("bronze_join_sql")
+    refs = _TABLE_REF_RE.findall(join_sql) if join_sql else []
+    return [alias or table for table, alias in refs] or [plan.source_table]
+
+
+def _scope_joins(plan: "CanonicalValidationPlan", side: str) -> str:
+    """Workbook JOIN clauses for 'bronze' or 'silver' (ADR 0046), rendered by
+    scope_filter.render_silver() into population_scope["scope_joins"]."""
+    return ((plan.population_scope or {}).get("scope_joins") or {}).get(side, "")
+
+
+def _bronze_from_with_joins(plan: "CanonicalValidationPlan") -> str:
+    from_clause = _bronze_from_clause(plan)
+    joins = _scope_joins(plan, "bronze")
+    if joins and re.search(r"\bWHERE\b", from_clause, re.I):
+        raise ValueError(
+            f"{plan.target_table}: Coalesce join SQL already has a WHERE -- workbook JOINs "
+            "can't be appended after it; choose Whole table for this node."
+        )
+    return from_clause + joins
+
+
+def _silver_has_is_current(plan: "CanonicalValidationPlan") -> bool:
+    return any(m.target_column.upper() == "IS_CURRENT" for m in plan.mappings)
+
+
+def _bronze_filters(aliases: List[str], source_filter: str, from_clause: str, windowed: bool) -> str:
+    """ADR 0045: _FIVETRAN_ACTIVE = TRUE on every Bronze table read, plus the
+    scope filter (plan.source_filter). When the SELECT has a window function
+    (SYS_VERSION = ROW_NUMBER() OVER ...), the active-row predicate goes in
+    QUALIFY so it is applied after the window, exactly like Silver's own
+    IS_CURRENT filter on the materialized SYS_VERSION.
+    ponytail: joined (non-driving) tables use COALESCE(.., TRUE) so an unmatched
+    LEFT JOIN row survives; a match that exists only as inactive history also
+    drops the base row -- revisit if a multisource node shows that."""
+    active = [f'"{aliases[0]}"."_FIVETRAN_ACTIVE" = TRUE'] + [
+        f'COALESCE("{a}"."_FIVETRAN_ACTIVE", TRUE) = TRUE' for a in aliases[1:]
+    ]
+    where = [source_filter] if source_filter else []
+    if not windowed:
+        where = active + where
+    keyword = "AND" if re.search(r"\bWHERE\b", from_clause, re.I) else "WHERE"
+    sql = f"\n{keyword} " + "\n  AND ".join(where) if where else ""
+    if windowed:
+        sql += "\nQUALIFY " + "\n  AND ".join(active)
+    return sql
+
+
+def _silver_prefix(plan: "CanonicalValidationPlan") -> str:
+    """Silver columns are qualified only once other tables are joined in."""
+    return f'"{plan.target_table}".' if _scope_joins(plan, "silver") else ""
+
+
+def _silver_filters(plan: "CanonicalValidationPlan") -> str:
+    parts = [f'{_silver_prefix(plan)}"IS_CURRENT" = TRUE'] if _silver_has_is_current(plan) else []
+    if plan.target_filter:
+        parts.append(plan.target_filter)
+    return ("\nWHERE " + "\n  AND ".join(parts)) if parts else ""
+
+
 def _silver_select_lines(plan: "CanonicalValidationPlan") -> List[str]:
     active = plan.active_mappings
     lines = []
     for i, mapping in enumerate(active):
-        col_ref = '"{}"'.format(mapping.target_column)
+        col_ref = '{}"{}"'.format(_silver_prefix(plan), mapping.target_column)
         line = f'{_wrap_null(col_ref)} AS "{mapping.target_column}"'
         lines.append(line + ("," if i < len(active) - 1 else ""))
     return lines
+
+
+def _union_source(plan: "CanonicalValidationPlan") -> str:
+    """Several Bronze sources -> one Silver table (ADR 0049): one SELECT per
+    Coalesce source mapping, each with its own column expressions, FROM/JOIN
+    and _FIVETRAN_ACTIVE filter (QUALIFY when windowed), combined with the
+    node's own set operator. Same column order/aliases in every branch."""
+    scope = plan.population_scope
+    if plan.source_filter or _scope_joins(plan, "bronze"):
+        raise ValueError(
+            f"{plan.target_table}: workbook scope filters are not supported on multi-source (UNION) "
+            "nodes yet -- choose Whole table for this node (ADR 0049)."
+        )
+    selected = [m for m in plan.mappings if not m.skip_validation]
+    parts = []
+    for branch in scope["union_branches"]:
+        lines = [
+            f'{_wrap_null(branch["columns"][m.target_column])} AS "{m.target_column}"'
+            + ("," if i < len(selected) - 1 else "")
+            for i, m in enumerate(selected)
+        ]
+        from_clause = branch["from_sql"]
+        refs = _TABLE_REF_RE.findall(from_clause)
+        aliases = [alias or table for table, alias in refs] or [plan.source_table]
+        windowed = any(_WINDOW_RE.search(line) for line in lines)
+        parts.append("SELECT\n    " + "\n    ".join(lines) + "\n" + from_clause
+                     + _bronze_filters(aliases, "", from_clause, windowed))
+    return f"\n{scope.get('union_strategy', 'UNION ALL')}\n".join(parts)
 
 
 def emit_query_set(plan: "CanonicalValidationPlan") -> ValidationQuerySet:
@@ -116,18 +211,26 @@ def emit_query_set(plan: "CanonicalValidationPlan") -> ValidationQuerySet:
     ValidationQuerySet shape YAMLConfigWriter.write_from_plan() already
     consumes -- no change needed there.
     """
-    bronze_select = "\n    ".join(_bronze_select_lines(plan))
+    bronze_lines = _bronze_select_lines(plan)
+    bronze_select = "\n    ".join(bronze_lines)
     silver_select = "\n    ".join(_silver_select_lines(plan))
+    from_clause = _bronze_from_with_joins(plan)
+    windowed = any(_WINDOW_RE.search(line) for line in bronze_lines)
+    silver_from = (f'FROM "{plan.target_database}"."{plan.target_schema}"."{plan.target_table}"'
+                   + _scope_joins(plan, "silver"))
 
-    main_validation_source = f"SELECT\n    {bronze_select}\n{_bronze_from_clause(plan)}"
-    main_validation_target = (
-        f"SELECT\n    {silver_select}\n"
-        f'FROM "{plan.target_database}"."{plan.target_schema}"."{plan.target_table}"'
-    )
-    row_count_source = f"SELECT COUNT(*) AS count\n{_bronze_from_clause(plan)}"
-    row_count_target = (
-        f'SELECT COUNT(*) AS count FROM "{plan.target_database}"."{plan.target_schema}"."{plan.target_table}"'
-    )
+    # Same population on both sides, data and count queries alike (ADR 0045).
+    if (plan.population_scope or {}).get("union_branches"):
+        main_validation_source = _union_source(plan)
+        row_count_source = f"SELECT COUNT(*) AS count FROM (\n{main_validation_source}\n)"
+    else:
+        aliases = bronze_aliases(plan)
+        main_validation_source = (f"SELECT\n    {bronze_select}\n{from_clause}"
+                                  f"{_bronze_filters(aliases, plan.source_filter, from_clause, windowed)}")
+        row_count_source = (f"SELECT COUNT(*) AS count\n{from_clause}"
+                            f"{_bronze_filters(aliases, plan.source_filter, from_clause, False)}")
+    main_validation_target = f"SELECT\n    {silver_select}\n{silver_from}{_silver_filters(plan)}"
+    row_count_target = f"SELECT COUNT(*) AS count {silver_from}{_silver_filters(plan)}"
 
     return ValidationQuerySet(
         table_name=plan.source_table,

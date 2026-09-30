@@ -17,7 +17,7 @@ You are a Data Quality Engineering (DQE) and AI-native review specialist for the
 - Silver-layer (Snowflake-to-Snowflake) Coalesce pipeline: `src/connector/coalesce_client.py`, `src/silver/**` (owned by the `silver-layer-coalesce-specialist` agent) — see `docs/decisions/0013`–`0027` for the design and known deferrals (no macro interpreter, open `_FIVETRAN_ACTIVE` question in 0020, unconfirmed Bronze-side schema assumption, no Silver row filtration yet) before flagging any of those as gaps rather than documented scope
 - Execution-mode contract: incremental capability in YAML, run mode via `VALIDATOR_INCREMENTAL_*` env (ADR 0034); hybrid + incremental blocked (0033); `row_hash_validation` never standalone (0035); PK-less hybrid via `identity` + lowercase hex (0036/0037). Check `docs/decisions/README.md` before flagging any of these as bugs.
 - Data extraction and connectors: `src/sql_extractor/**`, `src/connector/**` (renamed from `gemini_connector` — no Gemini code should remain; flag it as a finding if you find any), `config/**`, `dial_config.json`
-- UI: `webapp/app.py`, `webapp/README.md`
+- UI: `webapp/app.py` + `webapp/ui_common.py` + `webapp/views/<tab>.py` (ADR 0050), `webapp/README.md`
 - Integrations/ops: `src/notifier.py`, JIRA code/docs, `docker-compose.yml`, `Dockerfile`
 - Tests: `test_*.py`, `Project/utils/test_*.py`, `requirements.txt`
 - `trash/` — code intentionally removed from the active tree; don't flag its contents as "missing," and don't treat files there as still in scope for review.

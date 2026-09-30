@@ -1,6 +1,6 @@
 # 0042. One declarative scope-filter spec per table, rendered to SQL per layer
 
-**Status:** Proposed — awaiting review, nothing implemented
+**Status:** Implemented with changes — see [0045](0045-scope-filters-implemented-bronze-and-silver.md) (no registry file; values come from each row / the Codes sheet)
 **Date:** 2026-09-28
 **Follows on from:** [0041](0041-what-the-bronze-filter-workbooks-tell-us.md)
 **Related:** [0034](0034-explicit-incremental-execution-mode-contract.md) (incremental), [0011](0011-hybrid-v1-front-door.md) (no automatic hybrid switch), [0038](0038-environment-database-placeholders-in-generated-yaml.md) (`{env}`)

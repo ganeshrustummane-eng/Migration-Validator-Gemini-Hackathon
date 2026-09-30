@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en" data-template-version="1" data-handout-version="4.7">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="generator" content="ai-run-milestone-submission/1">
+<meta name="handout-version" content="4.7">
+<title>Sentinel QA · AI/RUN Mission 2026 · Milestone 1</title>
+<style id="kit-fallback">svg{max-width:1.5rem;max-height:1.5rem}.brand-word{max-width:9rem;max-height:none}#nojs,.tools,.qpanel{display:none}#kit-offline{font:15px/1.5 system-ui,sans-serif;color:#1c2430;background:#fffac8;border:1px solid #e6cf5b;border-radius:8px;padding:12px 16px;margin:16px}#kit-offline.kit-wait{display:flex;gap:10px;align-items:center;background:#f1f6fd;border-color:#dfe6f0}#kit-offline.kit-wait::before{content:"";flex:none;width:16px;height:16px;border-radius:50%;border:2px solid #ff6b1a;border-right-color:transparent;animation:kitspin .8s linear infinite}@keyframes kitspin{to{transform:rotate(360deg)}}</style>
+</head>
+<body>
+<p id="kit-offline"><b>Download this file and open it from your computer.</b> If you see only this line, the page has not been drawn yet: a Teams or SharePoint preview blocks it, and so does a machine with no internet when the file is opened for the first time. Open it from your own computer, online, and the full page appears. Once you press Download for Leap, the saved file works anywhere, offline included.</p>
+<script type="application/json" id="page-data">
+{
+  "templateVersion": 1,
+  "team": {
+    "code": "1095-SSCO-STOR",
+    "name": "Sentinel QA",
+    "tagline": "AI-generated, human-approved migration validation into Snowflake",
+    "account": "Storable",
+    "size": 5,
+    "coach": null,
+    "people": [
+      {
+        "name": "Ganesh Rustummane",
+        "role": "Data Quality Engineer, builds the migration validation framework"
+      },
+      {
+        "name": "Lovy Jain",
+        "role": "Team Lead"
+      }
+    ],
+    "milestone": 1,
+    "dueDate": "2026-09-30"
+  },
+  "context": {
+    "delivers": "Data quality and migration validation for Storable: verifying data migrated from PostgreSQL, Athena, MS SQL Server (SiteLink) and Redshift into Snowflake across completeness, uniqueness, accuracy, timeliness, validity and consistency.",
+    "painPoint": "Messy, distributed data coming from many sources, each with different data types. Converting and validating it was manual: engineers read filter requirements from Excel sheets, hand-wrote SQL and YAML validation rules, then manually checked results across millions of rows. Data-type mismatches between sources added more effort.",
+    "aiTools": [
+      "Claude Code",
+      "EPAM DIAL proxy (AI backend, used while direct Claude API key is being set up)"
+    ],
+    "baseline": "No formal baseline was captured before the change. All figures are team estimates or self-report; none come from telemetry or Jira labels yet. Plan to add Jira labels and billing exports to measure properly from next sprint."
+  },
+  "northStar": {
+    "goal": "An AI-driven migration validation factory: validation requirements (filters from the test sheet / filter workbooks) go in; AI generates the validation SQL and YAML rules for each source and target; a human reviews and accepts before anything runs; results are compared row by row and reported and tracked in Jira.",
+    "shiftFrom": "Manually reading requirements from Excel sheets, manually writing SQL, manually writing YAML rules, manually validating data and data types across very large tables",
+    "shiftTo": "AI generates SQL and YAML from the requirement in about 5-10 seconds (estimated), engineer reviews and accepts, validation runs, results are reported and tracked in Jira",
+    "clientOutcome": "Validated data migration from PostgreSQL, Athena, MS SQL Server (SiteLink) and Redshift into Snowflake, with quality verified across six dimensions: completeness, uniqueness, accuracy, timeliness, validity, and consistency",
+    "currentLevel": 2,
+    "targetLevel": 3
+  },
+  "architecture": {
+    "summary": "Two-phase AI-driven validation factory. Phase 1 (Generate): requirement or filter from test sheet → Claude Code agent (with project skills and context) → generates SQL and YAML rules for source and target → human review and approval. Phase 2 (Run): read-only execution via connectors → row-level comparison across medallion layers (Bronze and Silver built; Gold planned) → result and Jira update (schema-drift tickets today). Exact and fuzzy column matching runs first; AI is called only for ambiguous columns and prose filter rows. Every AI result lands in an editable grid that a human reviews before execution.",
+    "pieces": [
+      {
+        "name": "Validation agent",
+        "role": "Generates SQL and YAML rules from requirements, compares results; includes specialist sub-agents for Bronze YAML/SQL generation, Silver/Coalesce validation, DQE review, and an orchestrator that routes requests",
+        "tool": "Claude Code"
+      },
+      {
+        "name": "Streamlit web UI",
+        "role": "Single thin wrapper over the engine: Connect → Exclusions → Generate YAML → Review & Approve → Run Validation. No validation logic lives in the UI.",
+        "tool": "Streamlit"
+      },
+      {
+        "name": "Database connectors",
+        "role": "Connect to source databases (PostgreSQL, Athena, MS SQL Server / SiteLink, Redshift) and target (Snowflake); Python today, MCP layer planned",
+        "tool": "Python (MCP planned)"
+      },
+      {
+        "name": "Medallion layer validation",
+        "role": "Bronze: source DB to Snowflake mapping with exact/fuzzy/AI column matching and schema-validation review. Silver: reads Coalesce node metadata, classifies columns, emits Coalesce transform inside NULL-safe comparison wrapper, blocks YAML generation until schema-drift columns are resolved. Gold: planned.",
+        "tool": "SQL on Snowflake"
+      },
+      {
+        "name": "Scope filters",
+        "role": "Parses each filter workbook row (SQL or prose) and renders it as JOINs for Bronze and Silver; prose rows can be interpreted by AI into an editable join grid reviewed by a human; a row that does not parse blocks generation instead of being guessed",
+        "tool": "Python / Claude Code"
+      },
+      {
+        "name": "Semantic normalisation",
+        "role": "Canonicalises source and target types before comparing (e.g. hstore/jsonb → Snowflake VARIANT) so type differences are not reported as data errors",
+        "tool": "Python"
+      },
+      {
+        "name": "Exclusions",
+        "role": "Global, per-source-database, Silver, and Bronze-schema exclusion files, plus table-specific exclusions set at runtime in the UI; Fivetran metadata columns (_FIVETRAN_SYNCED, _FIVETRAN_DELETED, _FIVETRAN_ID, _FIVETRAN_INDEX, _FIVETRAN_ACTIVE) always excluded from comparison",
+        "tool": "YAML / Python"
+      },
+      {
+        "name": "Rule book",
+        "role": "Static base-rule catalog (10 rules) plus a human-gated learned-rules layer; corrections to AI/fuzzy column matches are recorded and read back to improve future confidence scoring; an active learned rule can only replay an existing base rule, never its own SQL (anti-hallucination guard)",
+        "tool": "YAML / Python"
+      },
+      {
+        "name": "Comparison engine",
+        "role": "Value-level row comparison with PASS / FAIL / SOURCE_ONLY / TARGET_ONLY per row; hash-based fallback for tables with no primary key; passed rows always reported so 'no failures' cannot be confused with 'did not run'; execution modes: full, historical/incremental, integrity checks, report packs, opt-in tiered hybrid mode; reports in CSV and YAML",
+        "tool": "Python / SQL"
+      },
+      {
+        "name": "Decision log (ADRs)",
+        "role": "~48 numbered Architecture Decision Records capturing every non-obvious design decision and why; the agent reads these so it does not repeat past mistakes",
+        "tool": "Markdown files"
+      },
+      {
+        "name": "Jira integration",
+        "role": "Direct Jira client for schema-drift ticket creation and status updates from the UI; Jira MCP path (agent creates/updates tickets itself) is planned",
+        "tool": "Python (MCP planned)"
+      },
+      {
+        "name": "RAG knowledge layer",
+        "role": "Indexes ADRs, project skills, schema metadata, mapping and filter workbook definitions, exclusion lists, rule-book entries, and past validation outcomes (summary level only, never row data); retrieval scoped by project, source system, target layer, and table; retrieved sources shown in review. Today the agent loads ADRs and skills directly as context; a retrieval index is the next step",
+        "tool": "RAG (planned)"
+      },
+      {
+        "name": "MCP layer",
+        "role": "Planned: expose each database, Jira, Coalesce, ETL tools, and the RAG knowledge layer as read-only MCP servers so the Claude Code agent reaches them through one standard interface; adding a new database becomes registering another MCP server; tool-level allow-list per project and per environment",
+        "tool": "MCP (planned)"
+      }
+    ],
+    "assets": [
+      {
+        "name": "Decision log / ADRs (~48 records)",
+        "use": "Records every non-obvious design decision and why; agent reads these to avoid repeating past mistakes; freshness maintained by rebuilding when ADRs change"
+      },
+      {
+        "name": "Rule book (10 base rules + learned-rules layer)",
+        "use": "Static base-rule catalog plus human-gated learned rules; corrections to AI/fuzzy column matches are recorded and read back to improve future confidence scoring"
+      },
+      {
+        "name": "Filter workbooks",
+        "use": "Scope filters from test sheets; each workbook row (SQL or prose) is parsed and rendered as JOINs for Bronze and Silver validation"
+      },
+      {
+        "name": "Exclusion files",
+        "use": "Global, per-source-database, Silver, and Bronze-schema exclusion files used to prevent false mismatches from known asymmetric filters or Fivetran metadata columns"
+      }
+    ],
+    "demo": "POC shown to the client: Bronze and Silver flows. A filter workbook row becomes AI-generated SQL and YAML; a human reviews and approves; the Silver flow reads a Coalesce node and blocks generation until schema-drift columns are resolved; validation then runs read-only with row-level PASS / FAIL / SOURCE_ONLY / TARGET_ONLY results. Recording link not yet added."
+  },
+  "stages": [
+    {
+      "stage": "quality",
+      "tools": [
+        "Claude Code",
+        "Streamlit",
+        "Python",
+        "Snowflake SQL"
+      ],
+      "description": "Validation requirements (filters from the test sheet / filter workbooks) are fed to the Claude Code agent, which generates SQL and YAML rules for source and target. A human reviews and corrects if needed, then accepts before execution. The comparison engine runs read-only validation and reports PASS / FAIL / SOURCE_ONLY / TARGET_ONLY per row. Schema-drift tickets are created in Jira from the UI.",
+      "metrics": [
+        {
+          "label": "SQL/YAML generation time",
+          "status": "estimated",
+          "value": "~5-10 seconds to generate (plus human review time)",
+          "method": "Engineer observation",
+          "note": "No formal baseline captured before the change. Before: manual writing, described as time-consuming. After: ~5-10 seconds to generate. Cannot be classified as measured."
+        },
+        {
+          "label": "Hours saved per person per day",
+          "status": "estimated",
+          "value": "~3-4 h/person/day (~15-20 h/week per person)",
+          "method": "Team self-report",
+          "note": "No telemetry or Jira labels. Denominator: individual team members on a 5-person team. No pre-AI baseline to compare against."
+        },
+        {
+          "label": "AI-assisted deliverables (Jira label)",
+          "status": "untracked",
+          "note": "Plan to label Jira tickets as AI-assisted from next sprint. With MCP in place, the Jira MCP tool could apply the label automatically and log generation time per ticket, giving the first measured baseline."
+        }
+      ]
+    },
+    {
+      "stage": "engineering",
+      "tools": [
+        "Claude Code"
+      ],
+      "description": "The validation framework itself is being built with Claude Code. Framework improvements and issues found in daily validation work become the next engineering task. Claude Code generates code, prompts, skills, and ADRs; a human reviews and merges.",
+      "metrics": [
+        {
+          "label": "Framework components built",
+          "status": "untracked",
+          "value": "Validation agent, Streamlit UI, Python connectors, Bronze and Silver medallion checks, comparison engine, rule book, decision log (~48 ADRs), direct Jira client all built. Gold layer, RAG and MCP planned.",
+          "method": "Repository status and team self-report",
+          "note": "No quantitative before/after metric captured for the engineering stage."
+        }
+      ]
+    }
+  ],
+  "keyNumbers": [
+    {
+      "id": "daily-active",
+      "status": "estimated",
+      "value": "~80-90% of team (approx. 4 of 5 team members)",
+      "note": "Team self-report. No telemetry or licence billing export used."
+    },
+    {
+      "id": "ai-assisted",
+      "status": "untracked",
+      "note": "Most SQL and YAML validation deliverables are AI-generated but not counted per sprint. Plan to label Jira tickets as AI-assisted from next sprint."
+    },
+    {
+      "id": "cycle-time",
+      "status": "untracked",
+      "note": "No formal baseline captured. Cycle time not tracked."
+    },
+    {
+      "id": "hours-saved",
+      "status": "estimated",
+      "value": "~3-4 h/person/day (~15-20 h/week per person)",
+      "note": "Team self-report. No telemetry. Denominator: individual team members on a 5-person team. No pre-AI baseline to compare against."
+    },
+    {
+      "id": "token-cost",
+      "status": "estimated",
+      "value": "~USD 10-50/month running (usage-based API); ~USD 100-150/member/month during development; client subscription ~USD 1,000",
+      "note": "Estimated from subscription and billing. Not tracked per sprint. Client (Storable) provides the Claude subscription (~USD 1,000; billing period not confirmed)."
+    }
+  ],
+  "costs": {
+    "build": [
+      {
+        "what": "People-time (iterative agile build; weeks not tracked)",
+        "amount": null,
+        "status": "estimated"
+      },
+      {
+        "what": "AI spend during build (Claude Code, usage-based)",
+        "amount": "~USD 100-150 per team member per month during development",
+        "status": "estimated"
+      }
+    ],
+    "run": [
+      {
+        "what": "Usage-based API cost (running)",
+        "amount": "~USD 10-50 per month",
+        "status": "estimated"
+      },
+      {
+        "what": "Client-provided Claude subscription (Storable pays)",
+        "amount": "~USD 1,000 (billing period not confirmed)",
+        "status": "estimated"
+      }
+    ]
+  },
+  "plan": {
+    "scaling": "Move from Python API connectors to MCP so the factory can connect to any number of databases and tools. Add ETL tool connectors via MCP including sync-status checks for timeliness. Stand up the RAG index (ADRs, skills, schema metadata, rule book) with per-project scoping and show retrieved sources in review. Complete Gold-layer checks. Capture the first real baseline: Jira AI-assisted labels, generation time logs, billing export. Suggested order: (1) baseline metrics, (2) RAG index, (3) read-only DB MCP servers, (4) Jira and ETL MCP servers, (5) packaging.",
+    "adoption": "Before another team can adopt, the framework needs to finish the development phase and be packaged: installable package, documented setup, per-project config for MCP servers and RAG scope. No other teams committed yet.",
+    "newFunction": "A business-ready product that connects to N databases and ETL tools through MCP, with a RAG-backed agent that works per project and a measured (not estimated) impact baseline, within two months."
+  },
+  "issues": [
+    {
+      "what": "Generating correct YAML rules and SQL when source data types are unknown or inconsistent across databases",
+      "fix": "Discuss with team, seniors and leads to agree data-type handling rules per source; encode the agreed rules in the semantic-normalisation layer and index them in RAG so the agent retrieves the right rule per source",
+      "needs": "Guidance on approving MCP servers for production use; review of the RAG design against EPAM/client data-handling policy"
+    }
+  ],
+  "customer": {
+    "shown": "yes",
+    "reaction": "The client liked the product, provided a Claude API key/subscription (~USD 1,000; billing period not confirmed) for the team, and uses it on their side too. After the POC, Ganesh was onboarded to the client project.",
+    "support": "Deployment not planned yet. The team of 5 runs it locally. Deployment will be considered after the development phase is complete. MCP servers and the RAG index will need a hosting decision at that point."
+  },
+  "programme": {
+    "factory": "Yes, with human-in-the-loop at every step. The quality stage is automated end to end from requirement to generated validation; measurement of the impact is still at the estimated stage. MCP and RAG are the next building blocks that make it a repeatable factory rather than a local tool.",
+    "feedback": "Very helpful and a strong learning experience."
+  },
+  "evidence": [
+    {
+      "what": "SQL/YAML generation time after AI introduction (~5-10 seconds to generate)",
+      "where": "Engineer observation during daily validation work",
+      "caveat": "No formal baseline captured before the change; before figure is qualitative ('time-consuming, manual'). After figure is an engineer estimate, not telemetry."
+    },
+    {
+      "what": "Daily active AI users (~80-90% of 5-person team)",
+      "where": "Team self-report",
+      "caveat": "No telemetry or licence billing export. Estimate only."
+    },
+    {
+      "what": "Hours saved (~3-4 h/person/day, ~15-20 h/week per person)",
+      "where": "Team self-report",
+      "caveat": "No telemetry or Jira labels. Estimate only. No pre-AI baseline to compare against."
+    },
+    {
+      "what": "AI cost (~USD 100-150/member/month during development; ~USD 10-50/month running; client subscription ~USD 1,000)",
+      "where": "Subscription and billing estimates",
+      "caveat": "Not tracked per sprint. Client (Storable) pays the Claude subscription."
+    },
+    {
+      "what": "Framework components built (validation agent, Streamlit UI, Python connectors, Bronze/Silver checks, comparison engine, rule book, ~48 ADRs, direct Jira client)",
+      "where": "Repository and team self-report",
+      "caveat": "Gold layer, RAG and MCP are planned, not built."
+    }
+  ],
+  "learnings": [
+    {
+      "title": "Decision files (ADRs) keep the agent aligned",
+      "text": "Maintaining a numbered ADR log (~48 records) so the agent reads past decisions prevents it from repeating mistakes and keeps the build consistent as requirements evolve."
+    },
+    {
+      "title": "Context window and memory management is critical",
+      "text": "Growing the prompt to handle more project context hits limits quickly. RAG (retrieval of relevant chunks scoped by project, source, and table) is the right fix rather than ever-longer prompts."
+    },
+    {
+      "title": "Agent must see schema metadata, not data values",
+      "text": "Generating YAML rules and SQL without knowing source data types led to wrong or fragile rules. The agent must be given information_schema metadata per source; actual data values must never be indexed or passed to the agent."
+    },
+    {
+      "title": "Asymmetric filters are validator bugs, not data bugs",
+      "text": "A filter applied on one side only looks like a data-quality failure but is a validation configuration error. Scope filters must be rendered identically for source and target."
+    },
+    {
+      "title": "Passed rows must always be reported",
+      "text": "'No failures reported' must never look the same as 'validation did not run'. The comparison engine always reports passed rows so a clean result is unambiguous."
+    },
+    {
+      "title": "Capture baselines before you start",
+      "text": "No formal baseline was captured before the AI change, so time savings cannot yet be proven with measured numbers. This is the team's biggest measurement gap and the first thing to fix in the next sprint."
+    }
+  ],
+  "advice": "Capture a baseline before you start. Give the agent schema metadata, not real data. Build decision files and skills early. Keep a human review gate on every generated query. Use retrieval for context instead of ever-longer prompts. Expose tools through MCP with read-only scope from day one.",
+  "links": [
+    {
+      "kind": "Demo recording",
+      "url": null
+    },
+    {
+      "kind": "Repository",
+      "url": null
+    },
+    {
+      "kind": "Dashboard",
+      "url": null
+    },
+    {
+      "kind": "Evidence pack",
+      "url": null
+    },
+    {
+      "kind": "LEAP record",
+      "url": null
+    }
+  ]
+}
+</script>
+<script data-kit-loader data-src="https://epa.ms/airun-m1--kit">(function(){var me=document.currentScript,urls=(me&&me.getAttribute("data-src")||"").split(/\s+/).filter(Boolean),box=document.getElementById("kit-offline"),done=false,i=0;function say(h,t,wait){if(!box)return;box.className=wait?"kit-wait":"";box.textContent="";var b=document.createElement("b");b.textContent=h;box.appendChild(b);if(t)box.appendChild(document.createTextNode(" "+t));}window.__kitReady=function(){done=true;clearTimeout(slow);};say("Loading the page\u2026","",true);var slow=setTimeout(function(){if(!done)say("Still loading\u2026","On some networks the first open takes a while. Please wait: the page appears by itself.",true);},8000);function next(){if(done)return;if(i>=urls.length){clearTimeout(slow);say("The page could not load.","Reload it, or open this file in Google Chrome. If you still see only this line, your network blocks it: ask a teammate who can see the page to press Download for Leap and send you the saved file, which works anywhere, offline included.",false);return;}var s=document.createElement("script"),moved=false;s.src=urls[i++];s.setAttribute("data-kit","");var t=setTimeout(function(){if(!done&&!moved){moved=true;next();}},12000);s.onload=function(){clearTimeout(t);};s.onerror=function(){clearTimeout(t);if(s.parentNode)s.parentNode.removeChild(s);if(!moved){moved=true;next();}};document.body.appendChild(s);}next();})();</script>
+</body>
+</html>

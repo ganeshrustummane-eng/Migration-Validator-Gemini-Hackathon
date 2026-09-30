@@ -1,0 +1,628 @@
+{
+  "schema_version": 2,
+  "source": {
+    "database": "BRONZE_EDGE",
+    "db_type": "snowflake",
+    "schema": "CONFORMED_RRADHAKR",
+    "table": "CONTACTS"
+  },
+  "target": {
+    "database": "DEV_EDGE_SILVER",
+    "db_type": "snowflake",
+    "schema": "CONFORMED_RRADHAKR",
+    "table": "INT_CONTACTS"
+  },
+  "source_table": "BRONZE_EDGE.CONFORMED_RRADHAKR.CONTACTS",
+  "target_table": "DEV_EDGE_SILVER.CONFORMED_RRADHAKR.INT_CONTACTS",
+  "status": "complete",
+  "generated_at": "2026-09-29T14:49:04.102582",
+  "generated_by": "coalesce_metadata",
+  "model_used": "N/A",
+  "ai_calls_made": 0,
+  "has_fivetran_active": false,
+  "source_filter": "t.\"_FIVETRAN_ACTIVE\" = TRUE AND f.\"_FIVETRAN_ACTIVE\" = TRUE AND f.\"COMPANY_ID\" IN (137,9088,501)",
+  "target_filter": "t.\"IS_CURRENT\" = TRUE AND f.\"IS_CURRENT\" = TRUE AND f.\"COMPANY_ID\" IN (137,9088,501)",
+  "population_scope": {
+    "natural_key_candidates": [
+      "CONTACT_ID",
+      "TENANT_ID",
+      "DELINQUENCY_DOCS_BY_EMAIL",
+      "DELETABLE",
+      "MIDDLE_INITIAL",
+      "CREATED_AT",
+      "DESCRIPTION",
+      "PRIMARY_PHONE_NUMBER_UUID",
+      "TITLE",
+      "UUID",
+      "OPT_IN_TO_TRANSACTIONAL_SMS",
+      "EMAIL_INVOICES",
+      "UPDATED_AT",
+      "TENANT_UUID",
+      "RECEIVE_LEGAL_NOTICES_BY_EMAIL",
+      "FIRST_NAME",
+      "EMAIL",
+      "PRIMARY_PHONE_NUMBER_ID",
+      "DELETED_BY_ID",
+      "OPT_IN_TO_MARKETING_SMS",
+      "OPT_IN_TO_MARKETING_EMAILS",
+      "LAST_NAME",
+      "DELETED_ON",
+      "DELETED",
+      "DELETED_BY_UUID",
+      "IS_CURRENT"
+    ],
+    "scope_filter": {
+      "table": "contacts",
+      "mode": "scoped",
+      "conditions": [],
+      "hops": [
+        {
+          "fk": "tenant_id",
+          "parent": "tenants",
+          "pk": "id",
+          "conditions": [],
+          "alias": "t"
+        },
+        {
+          "fk": "facility_id",
+          "parent": "facilities",
+          "pk": "id",
+          "conditions": [
+            {
+              "column": "company_id",
+              "op": "IN",
+              "value": "(137,9088,501)"
+            }
+          ],
+          "alias": "f"
+        }
+      ],
+      "errors": [],
+      "notes": [],
+      "raw_text": "select count(*) from  contacts j\njoin   tenants   t on j.tenant_id=t.id\njoin    facilities  f on t.facility_id=f.id \n  \nwhere   f.company_id in (137,9088,501) \n;",
+      "tier": "Medium",
+      "provenance": "postgres Table filters.xlsx / Sheet1 row 27",
+      "scope_values": []
+    },
+    "scope_joins": {
+      "bronze": "\nJOIN \"BRONZE_EDGE\".\"CONFORMED_RRADHAKR\".\"TENANTS\" t ON \"CONTACTS\".\"TENANT_ID\" = t.\"ID\"\nJOIN \"BRONZE_EDGE\".\"CONFORMED_RRADHAKR\".\"FACILITIES\" f ON t.\"FACILITY_ID\" = f.\"ID\"",
+      "silver": "\nJOIN \"DEV_EDGE_SILVER\".\"CONFORMED_RRADHAKR\".\"INT_TENANTS\" t ON \"INT_CONTACTS\".\"TENANT_ID\" = t.\"TENANT_ID\"\nJOIN \"DEV_EDGE_SILVER\".\"CONFORMED_RRADHAKR\".\"INT_FACILITIES\" f ON t.\"FACILITY_ID\" = f.\"FACILITY_ID\""
+    }
+  },
+  "relationships": [],
+  "identity": {
+    "type": "primary_key",
+    "source_primary_keys": [
+      "CONTACT_ID"
+    ],
+    "target_primary_keys": [
+      "CONTACT_ID"
+    ],
+    "candidate_keys": []
+  },
+  "row_hash": null,
+  "transformations": [],
+  "validations": [],
+  "requires_review": true,
+  "review_reasons": [
+    "surrogate business key is macro-computed (CONTACT_KEY); macro-argument parsing is deferred to a manual UI override for v1 (ADR 0014 5) -- confirm the correct join grain before trusting this plan.",
+    "2 column(s) excluded from the SELECT pending Coalesce macro resolution (no macro engine yet -- ADR 0014 3, ADR 0022): TENANT_KEY, PRIMARY_PHONE_NUMBER_KEY"
+  ],
+  "execution_strategy": "standard",
+  "primary_keys": {
+    "source": [
+      "CONTACT_ID"
+    ],
+    "target": [
+      "CONTACT_ID"
+    ],
+    "mismatch": false,
+    "mismatch_reason": ""
+  },
+  "stats": {
+    "total_source_columns": 34,
+    "active_mappings": 29,
+    "skipped_mappings": 5,
+    "exact_matches": 29,
+    "fuzzy_matches": 0,
+    "ai_resolved": 0,
+    "unmatched_source": 0
+  },
+  "exclusions": {
+    "total_source_columns": 34,
+    "validated": 29,
+    "excluded": [
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"TENANT_ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"PRIMARY_PHONE_NUMBER_ID\"']) }}",
+        "type": "BINARY",
+        "reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+      },
+      {
+        "column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+        "type": "TIMESTAMP",
+        "reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+      },
+      {
+        "column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+        "type": "TIMESTAMP",
+        "reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+      }
+    ],
+    "excluded_count": 5,
+    "coverage_pct": 85.3
+  },
+  "warnings": [],
+  "ambiguities": [],
+  "unmatched_source_columns": [],
+  "unmatched_target_columns": [],
+  "mappings": [
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "contact_key",
+      "target_column": "CONTACT_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "contact_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3).",
+      "is_primary_key": true
+    },
+    {
+      "source_column": "\"CONTACTS\".\"ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "contact_id",
+      "target_column": "CONTACT_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "contact_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"TENANT_ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "tenant_key",
+      "target_column": "TENANT_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "tenant_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+    },
+    {
+      "source_column": "\"CONTACTS\".\"TENANT_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "tenant_id",
+      "target_column": "TENANT_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "tenant_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELINQUENCY_DOCS_BY_EMAIL\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "delinquency_docs_by_email",
+      "target_column": "DELINQUENCY_DOCS_BY_EMAIL",
+      "target_type": "BOOLEAN",
+      "target_normalized": "delinquency_docs_by_email",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELETABLE\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "deletable",
+      "target_column": "DELETABLE",
+      "target_type": "BOOLEAN",
+      "target_normalized": "deletable",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"MIDDLE_INITIAL\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "middle_initial",
+      "target_column": "MIDDLE_INITIAL",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "middle_initial",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"CREATED_AT\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "created_at",
+      "target_column": "CREATED_AT",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "created_at",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DESCRIPTION\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "description",
+      "target_column": "DESCRIPTION",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "description",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"PRIMARY_PHONE_NUMBER_UUID\"",
+      "source_type": "VARCHAR(36)",
+      "source_normalized": "primary_phone_number_uuid",
+      "target_column": "PRIMARY_PHONE_NUMBER_UUID",
+      "target_type": "VARCHAR(36)",
+      "target_normalized": "primary_phone_number_uuid",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"TITLE\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "title",
+      "target_column": "TITLE",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "title",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"UUID\"",
+      "source_type": "VARCHAR(36)",
+      "source_normalized": "uuid",
+      "target_column": "UUID",
+      "target_type": "VARCHAR(36)",
+      "target_normalized": "uuid",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"OPT_IN_TO_TRANSACTIONAL_SMS\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "opt_in_to_transactional_sms",
+      "target_column": "OPT_IN_TO_TRANSACTIONAL_SMS",
+      "target_type": "BOOLEAN",
+      "target_normalized": "opt_in_to_transactional_sms",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"EMAIL_INVOICES\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "email_invoices",
+      "target_column": "EMAIL_INVOICES",
+      "target_type": "BOOLEAN",
+      "target_normalized": "email_invoices",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"UPDATED_AT\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "updated_at",
+      "target_column": "UPDATED_AT",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "updated_at",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"TENANT_UUID\"",
+      "source_type": "VARCHAR(36)",
+      "source_normalized": "tenant_uuid",
+      "target_column": "TENANT_UUID",
+      "target_type": "VARCHAR(36)",
+      "target_normalized": "tenant_uuid",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"RECEIVE_LEGAL_NOTICES_BY_EMAIL\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "receive_legal_notices_by_email",
+      "target_column": "RECEIVE_LEGAL_NOTICES_BY_EMAIL",
+      "target_type": "BOOLEAN",
+      "target_normalized": "receive_legal_notices_by_email",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"FIRST_NAME\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "first_name",
+      "target_column": "FIRST_NAME",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "first_name",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"EMAIL\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "email",
+      "target_column": "EMAIL",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "email",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "{{ ids_to_surrogate_key('EDGE', ['\"CONTACTS\".\"PRIMARY_PHONE_NUMBER_ID\"']) }}",
+      "source_type": "BINARY",
+      "source_normalized": "primary_phone_number_key",
+      "target_column": "PRIMARY_PHONE_NUMBER_KEY",
+      "target_type": "BINARY",
+      "target_normalized": "primary_phone_number_key",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "macro-expanded transform, not recomputable without Coalesce macro engine (ADR 0014 3)."
+    },
+    {
+      "source_column": "\"CONTACTS\".\"PRIMARY_PHONE_NUMBER_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "primary_phone_number_id",
+      "target_column": "PRIMARY_PHONE_NUMBER_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "primary_phone_number_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELETED_BY_ID\"",
+      "source_type": "NUMBER(38,0)",
+      "source_normalized": "deleted_by_id",
+      "target_column": "DELETED_BY_ID",
+      "target_type": "NUMBER(38,0)",
+      "target_normalized": "deleted_by_id",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"OPT_IN_TO_MARKETING_SMS\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "opt_in_to_marketing_sms",
+      "target_column": "OPT_IN_TO_MARKETING_SMS",
+      "target_type": "BOOLEAN",
+      "target_normalized": "opt_in_to_marketing_sms",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"OPT_IN_TO_MARKETING_EMAILS\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "opt_in_to_marketing_emails",
+      "target_column": "OPT_IN_TO_MARKETING_EMAILS",
+      "target_type": "BOOLEAN",
+      "target_normalized": "opt_in_to_marketing_emails",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"LAST_NAME\"",
+      "source_type": "VARCHAR(1020)",
+      "source_normalized": "last_name",
+      "target_column": "LAST_NAME",
+      "target_type": "VARCHAR(1020)",
+      "target_normalized": "last_name",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELETED_ON\"",
+      "source_type": "TIMESTAMP_NTZ(9)",
+      "source_normalized": "deleted_on",
+      "target_column": "DELETED_ON",
+      "target_type": "TIMESTAMP_NTZ(9)",
+      "target_normalized": "deleted_on",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELETED\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "deleted",
+      "target_column": "DELETED",
+      "target_type": "BOOLEAN",
+      "target_normalized": "deleted",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"DELETED_BY_UUID\"",
+      "source_type": "VARCHAR(36)",
+      "source_normalized": "deleted_by_uuid",
+      "target_column": "DELETED_BY_UUID",
+      "target_type": "VARCHAR(36)",
+      "target_normalized": "deleted_by_uuid",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "ROW_NUMBER() OVER (PARTITION BY \"CONTACTS\".\"ID\" ORDER BY \"CONTACTS\".\"UPDATED_AT\")",
+      "source_type": "NUMBER",
+      "source_normalized": "sys_version",
+      "target_column": "SYS_VERSION",
+      "target_type": "NUMBER",
+      "target_normalized": "sys_version",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "\"CONTACTS\".\"_FIVETRAN_ACTIVE\"",
+      "source_type": "BOOLEAN",
+      "source_normalized": "is_current",
+      "target_column": "IS_CURRENT",
+      "target_type": "BOOLEAN",
+      "target_normalized": "is_current",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "TO_TIMESTAMP_NTZ(\"CONTACTS\".\"_FIVETRAN_START\")",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "effective_from",
+      "target_column": "EFFECTIVE_FROM",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "effective_from",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": "",
+      "is_primary_key": true
+    },
+    {
+      "source_column": "TO_TIMESTAMP_NTZ(\"CONTACTS\".\"_FIVETRAN_END\")",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "effective_to",
+      "target_column": "EFFECTIVE_TO",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "effective_to",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [],
+      "reason": ""
+    },
+    {
+      "source_column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "sys_create_date",
+      "target_column": "SYS_CREATE_DATE",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "sys_create_date",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [
+        "null_check"
+      ],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+    },
+    {
+      "source_column": "CAST(CURRENT_TIMESTAMP() AS TIMESTAMP)",
+      "source_type": "TIMESTAMP",
+      "source_normalized": "sys_update_date",
+      "target_column": "SYS_UPDATE_DATE",
+      "target_type": "TIMESTAMP",
+      "target_normalized": "sys_update_date",
+      "match_method": "configured",
+      "confidence": 1.0,
+      "transformation_rule": "text",
+      "validation_rules": [
+        "null_check"
+      ],
+      "reason": "",
+      "skip_validation": true,
+      "skip_reason": "non-deterministic expression (e.g. CURRENT_TIMESTAMP) -- recomputing now can never equal the value written at ETL run time; NOT NULL is checked instead of value equality (ADR 0014 3)."
+    }
+  ]
+}

@@ -63,7 +63,7 @@ This is a bigger change than a filter — it means the plan's source side is no 
 | AI parsing | `src/ai/prompt_builder.py`, `src/ai/rule_planner.py` | Parse test-lead condition into filter/join/transformation/batch-scope spec; reuse existing rules from `rule_book.py` before inventing a new transformation |
 | SQL generation | [src/generated_queries/ai_sql_generator.py](../../../src/generated_queries/ai_sql_generator.py) | Render filter into WHERE; render joins into FROM/JOIN using the existing CTE pattern; render row-hash expression when PK known |
 | YAML persistence | [src/generated_queries/yaml_config_writer.py](../../../src/generated_queries/yaml_config_writer.py) | Serialize filter/join/transformation/row-hash spec so re-running from YAML reproduces the same SQL |
-| UI entry point | `webapp/app.py` Generate Single YAML / Generate Batch YAML tabs | Free-text box for the test-lead condition, calling the backend parse+generate function — do not build SQL in the UI |
+| UI entry point | `webapp/views/generate_yamls.py` (step 6 filters, JOIN rules, workbook scope filters) | Free-text box for the test-lead condition, calling the backend parse+generate function — do not build SQL in the UI |
 
 ## Verification checklist
 - [ ] Filter/join condition is identical in intent on both source and target dialects

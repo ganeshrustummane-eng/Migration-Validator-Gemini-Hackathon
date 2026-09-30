@@ -15,13 +15,13 @@
   "source_table": "BRONZE_EDGE.CONFORMED_RRADHAKR.DISCOUNT_LINES",
   "target_table": "DEV_EDGE_SILVER.CONFORMED_RRADHAKR.INT_DISCOUNT_LINES",
   "status": "complete",
-  "generated_at": "2026-09-29T11:19:56.155222",
+  "generated_at": "2026-09-29T14:52:20.317269",
   "generated_by": "coalesce_metadata",
   "model_used": "N/A",
   "ai_calls_made": 0,
   "has_fivetran_active": false,
-  "source_filter": "",
-  "target_filter": "",
+  "source_filter": "\"DISCOUNT_LINES\".\"CREATED_AT\" >= '2024-08-01' AND f.\"_FIVETRAN_ACTIVE\" = TRUE AND f.\"COMPANY_ID\" IN (137,9088,501)",
+  "target_filter": "\"INT_DISCOUNT_LINES\".\"CREATED_AT\" >= '2024-08-01' AND f.\"IS_CURRENT\" = TRUE AND f.\"COMPANY_ID\" IN (137,9088,501)",
   "population_scope": {
     "natural_key_candidates": [
       "DISCOUNT_LINE_ID",
@@ -42,7 +42,43 @@
       "OWNER_TYPE",
       "DISCOUNTED_ON",
       "IS_CURRENT"
-    ]
+    ],
+    "scope_filter": {
+      "table": "discount_lines",
+      "mode": "scoped",
+      "conditions": [
+        {
+          "column": "created_at",
+          "op": ">=",
+          "value": "'2024-08-01'"
+        }
+      ],
+      "hops": [
+        {
+          "fk": "facility_id",
+          "parent": "facilities",
+          "pk": "id",
+          "conditions": [
+            {
+              "column": "company_id",
+              "op": "IN",
+              "value": "(137,9088,501)"
+            }
+          ],
+          "alias": "f"
+        }
+      ],
+      "errors": [],
+      "notes": [],
+      "raw_text": "select count(*) from  discount_lines  j\njoin  facilities f on j.facility_id=f.id \nwhere f.company_id in (137,9088,501) and j.created_at >=  '2024-08-01';",
+      "tier": "Medium",
+      "provenance": "postgres Table filters.xlsx / Sheet1 row 16",
+      "scope_values": []
+    },
+    "scope_joins": {
+      "bronze": "\nJOIN \"BRONZE_EDGE\".\"CONFORMED_RRADHAKR\".\"FACILITIES\" f ON \"DISCOUNT_LINES\".\"FACILITY_ID\" = f.\"ID\"",
+      "silver": "\nJOIN \"DEV_EDGE_SILVER\".\"CONFORMED_RRADHAKR\".\"INT_FACILITIES\" f ON \"INT_DISCOUNT_LINES\".\"FACILITY_ID\" = f.\"FACILITY_ID\""
+    }
   },
   "relationships": [],
   "identity": {

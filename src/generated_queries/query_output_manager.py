@@ -288,7 +288,7 @@ class QueryOutputManager:
         else:
             query_set = self._sql_gen.generate_from_plan(plan)
         yaml_path       = self._yaml_writer.write_from_plan(plan, query_set, output_dir=output_dir, layer=layer)
-        count_yaml_path = self._yaml_writer.write_count_yaml_from_plan(plan, query_set, output_dir=output_dir)
+        count_yaml_path = self._yaml_writer.write_count_yaml_from_plan(plan, query_set, output_dir=output_dir, layer=layer)
 
         skipped_names = [m.source_column for m in skipped]
         result = GenerationResult(

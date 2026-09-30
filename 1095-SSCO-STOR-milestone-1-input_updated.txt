@@ -1,0 +1,181 @@
+AI/RUN Mission 2026 - Milestone 1 Team Review - Input for submission (UPDATED)
+Team: Sentinel QA | Team code: 1095-SSCO-STOR
+Format note: No team call was recorded (lead unavailable due to priority tasks). This document replaces the call transcript. Answers are given by team member Ganesh, organised by the guide's questionnaire. Where a number is estimated or not tracked, it is labelled as such. Please do not upgrade "estimated" or "untracked" to "measured".
+Status labels used below: [BUILT] = working in the repo today; [IN PROGRESS] = partly built; [PLANNED] = designed, not built; [CONFIRM] = owner must confirm before submission.
+Output file name required: 1095-SSCO-STOR-milestone-1.html
+
+==================================================
+1. ABOUT THE TEAM
+==================================================
+1.1 Team name: Sentinel QA
+1.2 Team code: 1095-SSCO-STOR
+1.3 Account / client: Storable
+1.4 AI Coach: Not assigned yet
+1.5 Participants (team of 5):
+  - Ganesh Rustummane - Data Quality Engineer, builds the migration validation framework
+  - Lovy Jain - Team Lead
+  - [Name 3 - Role]
+  - [Name 4 - Role]
+  - [Name 5 - Role]
+
+==================================================
+2. CLIENT LANDSCAPE
+==================================================
+2.1 What we deliver: Data quality and migration validation. Storable is migrating data from PostgreSQL, Athena, MS SQL Server (SiteLink) and Redshift into Snowflake, with the migration itself (extraction + load) done by another team using Fivetran and similar tools. Our job is to validate that migration, not perform it. We verify migrated data against the six data quality dimensions across source and target:
+  - Completeness - every source row is present in Snowflake (row counts + primary-key set difference: SOURCE_ONLY / TARGET_ONLY).
+  - Uniqueness - no duplicate rows or keys introduced by the migration (e.g. CDC replay, merge bugs).
+  - Accuracy - values match after correct type normalisation (e.g. hstore/jsonb vs Snowflake VARIANT compared by canonical meaning, not raw string).
+  - Timeliness - Fivetran sync lag (_FIVETRAN_SYNCED freshness) is reasonable; in-flight syncs are not flagged as failures.
+  - Validity - values conform to the expected type/format for that source-to-target type pair (rule book).
+  - Consistency - the same filter/exclusion is applied identically on both sides, so asymmetric filters do not create false mismatches.
+2.2 Biggest delivery pain before the programme: Messy, distributed data coming from many sources, each with different data types. Converting and validating it was manual: engineers read filter requirements from Excel sheets, hand-wrote SQL and YAML validation rules, then manually checked results across millions of rows. Data-type mismatches between sources added more effort. The pain was felt by the data quality engineers doing the validation and by the delivery timeline.
+2.3 AI tools approved for production use: Claude Code only. The client (Storable) provides a Claude subscription (approx. USD 1,000) and an API key for the team. No other AI tools are approved.
+  Note: an EPAM DIAL proxy is used as the AI backend in the framework today because the direct Claude key was not issued when the build started; the Claude API key is supported as the primary path as soon as it is set, with no code change. [CONFIRM whether to mention DIAL in the submission]
+
+==================================================
+3. THE NORTH STAR
+==================================================
+3.1 The AI factory: An AI-driven migration validation factory. Validation requirements (filters from the test sheet / filter workbooks) go in; AI generates the validation SQL and YAML rules for each source and target; a human reviews and accepts before anything runs; results are compared row by row and reported.
+  - Agentic: SQL generation, YAML rule generation, source-to-target comparison logic, Jira updates via MCP.
+  - Humans keep: review and approval of every generated query and rule, final pass/fail decisions, and all access decisions about data. Human-in-the-loop at every step.
+  - AI is used only where deterministic logic cannot decide: exact and fuzzy column matching runs first, and AI is called only for ambiguous columns and for prose filter rows. Every AI result lands in an editable grid that a human reviews.
+3.2 AI maturity: Current approx. Level 2 (team self-assessment, exact sub-level to be confirmed). Target: Level 3.
+  What moves us toward Level 3: MCP-based connectors (agent can reach any approved tool through a standard protocol), a RAG knowledge layer (agent retrieves the right project context instead of relying on a single long prompt), and a human-gated learning loop (corrections feed back into future matching).
+3.3 Today vs. with the factory:
+  - Today: manually read requirements, manually write SQL, manually write YAML rules, manually validate data and data types across very large tables.
+  - With the factory: AI generates SQL/YAML from the requirement in about 5-10 seconds (estimated), engineer reviews and accepts, validation runs, results are reported and tracked in Jira.
+
+==================================================
+4. SOLUTION
+==================================================
+4.1 Flow (two phases, in this fixed order):
+  Phase 1 - Generate (no execution): Requirement / filter from test sheet -> Claude Code agent (with project skills and context retrieved through RAG) -> generates SQL + YAML rules for source and target -> human review and approval.
+  Phase 2 - Run: read-only execution via connectors (Python today, MCP next) -> row-level comparison across medallion layers -> result and Jira update.
+  The run phase only reads a YAML that already exists. A run request for a table with no approved YAML triggers generation first; the runner never invents rules.
+  Guardrails: strictly read-only access; the AI is not given actual data values, only schema metadata (information_schema); generated queries cannot modify data. Tool access through MCP is scoped the same way (read-only tools only, no write tools exposed to the agent). [PLANNED for MCP]
+
+4.2 Components:
+  - Validation agent - generates SQL and YAML rules, compares results - Claude Code (skills, sub-agents, artifacts). [BUILT] Includes specialist agents for Bronze YAML/SQL generation, Silver/Coalesce validation, DQE review, and an orchestrator that routes requests.
+  - Streamlit web UI - single thin wrapper over the engine: Connect -> Exclusions -> Generate YAML -> Review & Approve -> Run Validation. No validation logic lives in the UI. [BUILT]
+  - Database connectors - connect to sources and target. Python connectors [BUILT]; MCP connector layer [PLANNED - see 4.4].
+  - Sources: PostgreSQL, Amazon Athena, MS SQL Server (SiteLink), Amazon Redshift (internally "TradeShift").
+  - Target: Snowflake (the single validation target).
+  - Medallion layer validation - bronze, silver, gold checks - SQL on Snowflake. Bronze [BUILT], Silver [BUILT, driven by Coalesce node metadata], Gold [CONFIRM status].
+      * Bronze: source DB -> Snowflake mapping with exact/fuzzy column matching, AI only for ambiguous columns, and a schema-validation review (missing/extra/type-mismatch columns).
+      * Silver: reads Coalesce node metadata through a read-only Coalesce REST client, classifies columns, emits the Coalesce transform verbatim inside a NULL-safe comparison wrapper, and blocks YAML generation until every Bronze/Silver schema-drift column is resolved (excluded or ticketed in Jira).
+  - Scope filters from the filter workbooks - each workbook row (SQL or prose) is parsed once and rendered as JOINs for Bronze and Silver. Prose rows can be interpreted by AI into an editable join grid; a human always reviews. A row that does not parse blocks generation instead of being guessed. [BUILT]
+  - ETL / ingestion awareness - handles Fivetran-loaded data: Fivetran metadata columns (_FIVETRAN_SYNCED, _FIVETRAN_DELETED, _FIVETRAN_ID, _FIVETRAN_INDEX, _FIVETRAN_ACTIVE) are excluded from comparison and _FIVETRAN_ACTIVE = TRUE is always applied so soft-deleted or superseded rows are not counted as migration failures. Coalesce is used for the Silver transform layer. [second ETL tool - CONFIRM name]
+  - Semantic normalisation - source and target types are canonicalised before comparing (hstore/jsonb -> VARIANT and similar), so type differences are not reported as data errors. [BUILT]
+  - Exclusions - global, per-source-database, Silver, and Bronze-schema exclusion files, plus table-specific exclusions set at runtime in the UI. [BUILT]
+  - Rule book - static base-rule catalog (10 rules) plus a human-gated learned-rules layer: corrections to AI/fuzzy column matches are recorded and read back to improve future confidence scoring. An active learned rule can only replay an existing base rule, never its own SQL (anti-hallucination guard). [BUILT]
+  - Comparison engine - one engine does value-level row comparison with PASS / FAIL / SOURCE_ONLY / TARGET_ONLY per row, a hash-based fallback for tables with no primary key, and passed rows are always reported so "no failures" can never be confused with "did not run". Execution modes: full, historical/incremental (date range set per run, never written into YAML), integrity checks, report packs, and an opt-in tiered hybrid mode. Reports are CSV and YAML. [BUILT]
+  - Decision log - numbered ADRs (about 48) record every non-obvious design decision and why; the agent reads these so it does not repeat past mistakes. [BUILT]
+  - RAG knowledge layer - see 4.3. [PLANNED / IN PROGRESS - CONFIRM]
+  - Jira integration - ticket creation and status. A direct Jira client is [BUILT] and is used from the UI for schema-drift tickets; the Jira MCP path (agent creates/updates tickets itself) is [CONFIRM whether live or planned].
+
+4.3 RAG knowledge layer (detail):
+  Purpose: the agent should work per project with the right context, without stuffing everything into the prompt. Context-window and memory management was our biggest learning (8.1), and RAG is the fix.
+  What is indexed (all metadata and documentation, never row data):
+    - Decision files / ADRs (why the framework is built the way it is).
+    - Project skills and agent definitions (connector specifics, normalisation rules, Silver/Coalesce rules).
+    - Schema metadata: table and column names and data types from information_schema for each source and Snowflake.
+    - Mapping and filter workbook definitions, exclusion lists, and rule-book entries (base and learned).
+    - Past validation outcomes at summary level (table, rule, result), used to spot recurring data-type issues.
+  What is never indexed: actual data values, credentials, or connection strings.
+  How it works:
+    1. Requirement arrives (e.g. "validate table X, layer Silver, with this filter").
+    2. Retrieval step pulls the top-matching chunks, scoped by project, source system, target layer, and table, so a Postgres question does not receive MSSQL rules.
+    3. The agent generates SQL/YAML using only the retrieved context plus the schema metadata.
+    4. The retrieved sources are shown next to the generated output in review, so the engineer can see what the agent relied on.
+    5. Human-approved corrections are written back (learned-rule layer) and re-indexed.
+  Freshness: the index is rebuilt when ADRs, skills, or schemas change, so the agent does not use stale decisions. Some existing docs are known to be stale (e.g. the rule-book lifecycle doc); those are tagged or excluded rather than indexed as truth.
+  Why this matters to the failure we hit: wrong YAML came from the agent not knowing source data types. Retrieval of per-source type mappings plus schema metadata directly targets that failure.
+  [CONFIRM RAG architecture name and vector store; today the "RAG" behaviour is decision files + skills loaded as context, and a proper retrieval index is the next step.]
+
+4.4 MCP layer (detail):
+  Today: Python connectors call each database directly. Next: expose each system as an MCP server so the Claude Code agent (and any other approved client) reaches them through one standard interface.
+  Planned MCP servers:
+    - One read-only database server per source type (PostgreSQL, Athena, MSSQL, Redshift) and one for Snowflake. Tools: list schemas/tables/columns (information_schema only), run a reviewed SELECT. No write tools exist.
+    - Jira server: create ticket, update status, add label (e.g. "AI-assisted").
+    - Coalesce server: read node metadata (already a read-only REST client today).
+    - ETL server(s): read Fivetran connector/sync status so timeliness checks and in-flight syncs are known before comparing.
+    - Knowledge server: exposes the RAG retrieval as a tool (search project context).
+  Guardrails carried over: read-only credentials; SELECT-only enforcement and a query allow-list; row limits; the schema-only rule for what the AI sees; every generated query approved by a human before an MCP tool runs it; an audit log of tool calls.
+  Why: adding a new database or ETL tool becomes "register another MCP server" instead of writing and wiring another connector, which is what lets the factory reach "N databases and ETL tools" (7.3).
+  Risk to manage: tool sprawl and permissions. Mitigation: tool-level allow-list per project and per environment (local, dev, stg, qat, prod).
+
+4.5 Environments: local, dev, stg, qat, prod. Generated YAML stores database names with an {env} placeholder that is resolved at run time, so one YAML serves every environment. Connection settings are environment-driven, one block per source.
+
+4.6 Reuse from EPAM AI Assets marketplace: None used so far. The framework was built directly on Claude Code.
+
+==================================================
+5. IMPACT
+==================================================
+5.1 SDLC stages actually changed:
+  - Quality (primary): validation SQL and YAML rule generation is now AI-generated and human-reviewed.
+  - Engineering: the validation framework itself is being built with Claude Code.
+  Honest note: the project is in the framework design and build stage. We are not yet claiming change across every SDLC stage.
+5.2 Per stage:
+  - Quality - Trigger: a validation requirement / filter from the test sheet. Produces: SQL and YAML rules for source and target. Human: reviews, corrects if needed, accepts before execution.
+  - Engineering - Trigger: a framework improvement or issue found in daily work. Produces: code, prompts, skills, ADRs. Human: reviews and merges.
+5.3 Measurement:
+  - Quality stage - SQL/YAML generation time. Before: manual writing, time-consuming (formal baseline was not captured before the change). After: about 5-10 seconds to generate, plus human review time. Method: engineer observation. Status: estimated, not measured.
+5.4 Daily active AI users: approx. 80-90% of the team (team of 5). Method: team self-report. Status: estimated.
+5.5 AI-assisted deliverables: Most SQL and YAML validation deliverables are AI-generated. Not counted per sprint. Status: untracked. Plan: label Jira tickets as AI-assisted from next sprint.
+5.6 Cycle / lead time: Untracked. No formal baseline captured.
+5.7 Hours saved: approx. 3-4 hours per person per day (approx. 15-20 h/week). Method: team self-report. Status: estimated.
+5.8 AI cost: approx. USD 100-150 per team member per month during development. Client-provided Claude subscription approx. USD 1,000. Method: subscription/billing. Status: estimated.
+5.9 How counted: all figures above are team estimates or self-report; none come from telemetry or Jira labels yet. We plan to add Jira labels and billing exports to measure properly. With MCP in place, the Jira MCP tool can apply the AI-assisted label automatically and log generation time per ticket, which gives the first measured baseline. [PLANNED]
+
+==================================================
+6. AI COSTS
+==================================================
+6.1 Design and build cost: Built iteratively in agile style: problems found in daily validation work become the next improvement. People-weeks not tracked. AI spend kept minimal (AI used only where needed: deterministic matching first, AI for ambiguous columns and prose filters only). Status: estimated, not measured.
+6.2 Running cost: approx. USD 10-50 per month (usage-based API). Status: estimated.
+6.3 Expected cost effect of RAG and MCP: RAG should reduce tokens per request because only relevant chunks are sent instead of the full context. MCP adds server hosting/maintenance effort but no extra AI cost by itself. Not yet measured. [PLANNED - measure after rollout]
+
+==================================================
+7. PLAN FOR THE NEXT 2 MONTHS
+==================================================
+7.1 What scales: more of the pipeline.
+  - Move from Python API connectors to MCP so the factory can connect to any number of databases and tools.
+  - Add ETL tool connectors (via MCP) so data can be validated directly from the ETL layer, including sync-status checks for timeliness.
+  - Stand up the RAG index (ADRs, skills, schema metadata, rule book) with per-project scoping and show retrieved sources in review.
+  - Complete Gold-layer checks. [CONFIRM]
+  - Capture the first real baseline: Jira AI-assisted labels, generation time logs, billing export.
+  Suggested order: (1) baseline metrics, (2) RAG index, (3) read-only DB MCP servers, (4) Jira and ETL MCP servers, (5) packaging.
+7.2 Other teams: none committed yet. Before another team can adopt it, the framework needs to finish the development phase and be packaged beyond local setup (installable package, documented setup, per-project config for MCP servers and RAG scope).
+7.3 In two months: a business-ready product that connects to N databases and ETL tools through MCP, not just the current fixed set, with a RAG-backed agent that works per project and a measured (not estimated) impact baseline.
+
+==================================================
+8. LEARNINGS
+==================================================
+8.1 What we learned:
+  - How to use AI efficiently and keep a decision file (ADR log) so the agent stays in the loop on past decisions.
+  - How to improve skills and agents and keep them up to date with requirements.
+  - Managing the context window and memory is critical. This is why we are adding RAG rather than growing the prompt.
+  - Surprise / failure: generating YAML and rule sections without knowing source data types led to wrong or fragile rules. We had to be much more careful about what data and metadata the agent can see.
+  - Asymmetric filters (applied on one side only) look like data-quality bugs but are validator bugs; scope filters must be rendered identically for source and target.
+  - "No failures reported" must never look the same as "validation did not run", so passed rows are always reported.
+  - We have not captured baselines, so we cannot yet prove our time savings with measured numbers.
+8.2 Advice to other teams: capture a baseline before you start; give the agent schema metadata, not real data; build decision files and skills early; keep a human review gate on every generated query; use retrieval for context instead of ever-longer prompts; expose tools through MCP with read-only scope from day one.
+
+==================================================
+9. ISSUES
+==================================================
+9.1 What is stuck: generating correct YAML rules and SQL when source data types are unknown or inconsistent across databases.
+9.2 How it gets unblocked: discussion with team, seniors and leads to agree data-type handling rules per source; encode the agreed rules in the semantic-normalisation layer and index them in RAG so the agent retrieves the right rule per source.
+9.3 Needed from the programme / account: [not identified yet - fill if needed]. Candidates: guidance on approving MCP servers for production use, and a review of the RAG design against EPAM/client data-handling policy.
+
+==================================================
+10. THE CUSTOMER
+==================================================
+10.1 Shown to client: Yes, as a POC.
+10.2 Client reaction: The client liked the product, provided a Claude API key / subscription for the team, and uses it on their side too. After the POC, Ganesh (then an intern at EPAM working on this POC) was onboarded to the client project.
+10.3 Support to deploy / scale: Deployment not planned yet. The team of 5 runs it locally. Deployment will be considered after the development phase is complete. MCP servers and the RAG index will need a hosting decision at that point.
+
+==================================================
+11. TWO QUESTIONS FROM THE PROGRAMME
+==================================================
+11.1 AI Factory? Yes, with human-in-the-loop at every step. The quality stage is automated end to end from requirement to generated validation; measurement of the impact is still at the estimated stage. MCP and RAG are the next building blocks that make it a repeatable factory rather than a local tool.
+11.2 How the programme is working: Very helpful and a strong learning experience. What would help: [add if any].

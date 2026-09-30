@@ -175,6 +175,64 @@ def _classify_column(
     )
 
 
+def _is_union_node(source_mappings: List[Dict[str, Any]]) -> bool:
+    """Several Bronze sources landing in one Silver table (ADR 0049): more than
+    one sourceMapping and EACH starts its own `FROM` -- Coalesce runs one
+    SELECT per mapping and combines them. (A mapping chain where only the
+    first has FROM and the rest are JOIN fragments is the ADR 0019 join shape.)"""
+    if len(source_mappings) < 2:
+        return False
+    return all(
+        ((sm.get("join") or {}).get("joinCondition") or "").lstrip().upper().startswith("FROM")
+        for sm in source_mappings
+    )
+
+
+_UNION_STRATEGIES = {"UNION": "UNION", "UNION DISTINCT": "UNION", "UNION ALL": "UNION ALL", "INSERT": "UNION ALL"}
+
+
+def _union_strategy(node: Dict[str, Any]) -> Tuple[str, Optional[str]]:
+    """(SQL set operator, review note or None). Coalesce keeps the multi-source
+    strategy in the node config (insertStrategy: INSERT | UNION | UNION ALL);
+    INSERT loads each source separately, i.e. UNION ALL."""
+    raw = ((node.get("config") or {}).get("insertStrategy")
+           or (node.get("metadata") or {}).get("insertStrategy") or "")
+    op = _UNION_STRATEGIES.get(str(raw).strip().upper())
+    if op:
+        return op, None
+    return "UNION ALL", (
+        f"multi-source strategy {'missing' if not raw else repr(raw)} in node metadata -- "
+        "assumed UNION ALL; confirm in Coalesce (ADR 0049)."
+    )
+
+
+def _union_branch_entries(
+    column: Dict[str, Any], source_mappings: List[Dict[str, Any]], workspace_id: str,
+    upstream_cache: Dict[str, Dict[str, str]],
+) -> List[ColumnMappingEntry]:
+    """One classified entry per UNION branch for *column*, using that branch's
+    own column source (sources[i]) and aliases. A source whose references point
+    at another branch's tables is not guessed at -- it is marked skipped."""
+    sources = column.get("sources") or []
+    entries = []
+    for i, sm in enumerate(source_mappings):
+        aliases = sm.get("aliases") or {}
+        src = sources[i] if i < len(sources) else None
+        refs = (src or {}).get("columnReferences") or []
+        if src is None or any(r.get("nodeID") not in aliases.values() for r in refs):
+            entries.append(ColumnMappingEntry(
+                source_column=column.get("name", ""), source_type=column.get("dataType", ""),
+                source_normalized=column.get("name", "").lower(), target_column=column.get("name", ""),
+                target_type=column.get("dataType", ""), target_normalized=column.get("name", "").lower(),
+                match_method=MatchMethod.CONFIGURED.value, skip_validation=True,
+                skip_reason=f"no column source for union branch {i + 1} ({sm.get('name') or 'unnamed'}) "
+                            "-- can't tell which expression that source uses (ADR 0049).",
+            ))
+            continue
+        entries.append(_classify_column(dict(column, sources=[src]), aliases, workspace_id, upstream_cache))
+    return entries
+
+
 def write_schema_diff_exclusion(db_type: str, column: str, reason: str) -> bool:
     return validate_cli.save_global_user_exclusion(db_type, column, reason)
 
@@ -306,9 +364,20 @@ def build_plan_from_metadata(node: Dict[str, Any], workspace_id: Optional[str] =
     upstream_cache: Dict[str, Dict[str, str]] = {}
     columns = metadata.get("columns") or []
 
+    is_union = _is_union_node(source_mappings)
     mappings: List[ColumnMappingEntry] = []
+    union_columns: List[Dict[str, str]] = [{} for _ in source_mappings] if is_union else []
     for column in columns:
-        mappings.append(_classify_column(column, alias_map, ws, upstream_cache))
+        if not is_union:
+            mappings.append(_classify_column(column, alias_map, ws, upstream_cache))
+            continue
+        # Several sources -> one Silver table: each branch has its own
+        # expression; the column is compared only if every branch has one.
+        branch_entries = _union_branch_entries(column, source_mappings, ws, upstream_cache)
+        skipped = next((e for e in branch_entries if e.skip_validation), None)
+        mappings.append(skipped or branch_entries[0])
+        for i, e in enumerate(branch_entries):
+            union_columns[i][e.target_column] = e.source_column
 
     plan = CanonicalValidationPlan(
         source_database=bronze_database, source_db_type="snowflake",
@@ -317,7 +386,24 @@ def build_plan_from_metadata(node: Dict[str, Any], workspace_id: Optional[str] =
         mappings=mappings, generated_by="coalesce_metadata",
     )
 
-    if not is_single_source:
+    if is_union:
+        strategy, strategy_note = _union_strategy(node)
+        plan.population_scope["union_strategy"] = strategy
+        plan.population_scope["union_branches"] = [
+            {"name": sm.get("name") or f"source {i + 1}",
+             "from_sql": resolve_ref_macro((sm.get("join") or {}).get("joinCondition") or "", bronze_schema),
+             "columns": union_columns[i]}
+            for i, sm in enumerate(source_mappings)
+        ]
+        plan.requires_review = True
+        plan.review_reasons.append(
+            f"{len(source_mappings)} Bronze sources are combined with {strategy} into this Silver table -- "
+            "make sure the key includes a column that tells the sources apart (e.g. a source-system "
+            "column), or rows with the same ID from different sources get compared to each other (ADR 0049)."
+        )
+        if strategy_note:
+            plan.review_reasons.append(strategy_note)
+    elif not is_single_source:
         # Multisource: concatenate each sourceMapping[].join.joinCondition
         # VERBATIM (no RelationshipSpec, no ON-clause parsing -- ADR 0019 3),
         # resolving only the {{ ref(...) }} macro. silver_sql_emitter.py's
@@ -369,6 +455,16 @@ def build_plan_from_metadata(node: Dict[str, Any], workspace_id: Optional[str] =
             "%d column(s) excluded from the SELECT pending Coalesce macro resolution "
             "(no macro engine yet -- ADR 0014 3, ADR 0022): %s"
             % (len(other_macro_skips), ", ".join(m.target_column for m in other_macro_skips))
+        )
+
+    # ADR 0045: Bronze side always keeps _FIVETRAN_ACTIVE rows only; Silver
+    # side keeps IS_CURRENT rows only -- which needs the column to exist.
+    if not any(m.target_column.upper() == "IS_CURRENT" for m in mappings):
+        plan.requires_review = True
+        plan.review_reasons.append(
+            "Silver table has no IS_CURRENT column -- Bronze side is filtered to "
+            "_FIVETRAN_ACTIVE = TRUE but the Silver side is not; if this table keeps "
+            "history rows they will show as TARGET_ONLY (ADR 0045)."
         )
 
     bronze_tables = [

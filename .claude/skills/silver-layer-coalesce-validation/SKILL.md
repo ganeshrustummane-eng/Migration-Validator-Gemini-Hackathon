@@ -1,6 +1,6 @@
 ---
 name: silver-layer-coalesce-validation
-description: "Use when validating a Silver-layer Coalesce node against its Bronze source in Snowflake. Covers fetching a Coalesce node's metadata, classifying its columns (passthrough / recomputable expression / macro-skip / non-deterministic-existence-only), resolving surrogate business keys, multisource (multi-table-join) nodes, and turning the result into a CanonicalValidationPlan + SchemaDiff, then emitting Silver's own SQL (Coalesce transform verbatim, wrapped in the Snowflake NULL placeholder, not routed through base_rules.py) and multi-line Silver YAML. Also the place to start for the planned (not yet built) Excel-driven Silver filtration. Files: coalesce_client.py, coalesce_plan_builder.py, silver_sql_emitter.py. See docs/decisions/0013-0027."
+description: "Use when validating a Silver-layer Coalesce node against its Bronze source in Snowflake. Covers fetching a Coalesce node's metadata, classifying its columns (passthrough / recomputable expression / macro-skip / non-deterministic-existence-only), resolving surrogate business keys, multisource (multi-table-join) nodes, and turning the result into a CanonicalValidationPlan + SchemaDiff, then emitting Silver's own SQL (Coalesce transform verbatim, wrapped in the Snowflake NULL placeholder, not routed through base_rules.py) and multi-line Silver YAML. Also covers multi-source UNION nodes (ADR 0049), the workbook scope filters as JOINs, and the always-on _FIVETRAN_ACTIVE / IS_CURRENT filters (ADR 0045-0047). Files: coalesce_client.py, coalesce_plan_builder.py, silver_sql_emitter.py. See docs/decisions/0013-0027."
 ---
 
 # Silver-Layer Validation via Coalesce Metadata
@@ -115,42 +115,61 @@ this skill's problem to fix.
 
 ## Open items (documented, don't silently "fix")
 
-- **`_FIVETRAN_ACTIVE` on the Bronze-recompute side — unresolved (ADR 0020).**
-  No filter is applied. The one real sample (`INT_FACILITIES`) is SCD-shaped
-  (`IS_CURRENT = _FIVETRAN_ACTIVE`), so a blanket `= TRUE` filter would
-  produce false `TARGET_ONLY` rows. Needs a per-node, declared/config-driven
-  flag or Coalesce-team confirmation — never inferred from column names.
+- **History rows are not validated.** Since ADR 0045, Silver compares only
+  current rows (Bronze `_FIVETRAN_ACTIVE`, Silver `IS_CURRENT`). A Silver
+  table without `IS_CURRENT` gets a `review_reasons` entry, because only its
+  Bronze side can be filtered.
 - **Macro resolution** (`{{ ids_to_surrogate_key(...) }}`) — still no
   interpreter (ADR 0014 §3, 0023). Macro columns are omitted, not guessed.
 - **Silver YAMLs generated before ADR 0022/0023** (e.g. `LEADS.yaml`) have
   truncated/commented SQL and must be regenerated.
 
-## Next stage (planned, not built): Silver filtration from an Excel file
+## Config naming (ADR 0047)
 
-The next Silver capability is row-level filtration supplied via an Excel
-file. Design proposed (not yet approved or built) in ADRs 0041–0044 — read
-those first. Facts to start from, so the design doesn't re-derive them:
+Silver YAMLs are `INT_<table>.yaml`. The same `INT_<table>` is the `tables:`
+key and the count_validation key (`yaml_config_writer.config_table_name()`).
+The runner finds a table by file stem and then by key, so never rename just
+one of them.
 
-- `silver_sql_emitter.py` has **no filter support today** — it never reads
-  `plan.source_filter`/`plan.target_filter`. Those fields already exist on
-  `CanonicalValidationPlan` (Bronze uses them, baked into SQL at generation
-  time), so they are the natural extension point, not a new plan field.
-- The filter must be applied **symmetrically** to the Bronze-recompute query
-  and the Silver query (CLAUDE.md Consistency dimension), and pushed into SQL,
-  never evaluated in Python.
-- For multisource nodes, the filter has to be placed after the verbatim
-  `bronze_join_sql` (`population_scope["bronze_join_sql"]`) and qualify
-  columns by alias.
-- An Excel reader already exists for Bronze (`src/excel_batch_loader.py`,
-  `load_excel()`/`derive_row_plan()`, see the `excel-batch-ai-review-planned`
-  skill) — reuse its loading, don't write a second Excel parser.
-- The ADR 0020 `_FIVETRAN_ACTIVE` question is itself a per-node filter
-  decision; an Excel-supplied per-node filter may be the "config-driven flag"
-  that ADR is waiting for — decide the two together.
-- Record the design as a new ADR (next number after the highest in
-  `docs/decisions/`) before implementing.
+## Scope filters and active-row filters (ADR 0045)
 
-## webapp/app.py Silver sub-flow
+- `emit_query_set()` always filters Bronze `_FIVETRAN_ACTIVE = TRUE` on
+  every table read. Multisource joined tables use `COALESCE(.., TRUE)`.
+  When the SELECT has a window function (`SYS_VERSION`), that filter goes in
+  `QUALIFY`, never in `WHERE`, because a `WHERE` would reset every
+  `SYS_VERSION` to 1.
+- The Silver side filters `"IS_CURRENT" = TRUE` when the column exists.
+- Workbook filters are **JOINs** (ADR 0046):
+  `population_scope["scope_joins"] = {bronze, silver}` is appended after
+  the FROM. Silver columns are qualified with the target table once joins
+  exist. The WHERE parts arrive as
+  `plan.target_filter` (Silver), rendered by
+  `scope_filter.render_silver(spec, plan)`:
+  - Parents are Bronze `<PARENT>` on one side and `INT_<PARENT>` with
+    `IS_CURRENT` on the other.
+  - Base-table columns come from the plan's passthrough mappings.
+  - A parent's `ID` becomes `<SINGULAR>_ID` (`silver_parent_column()`),
+    checked against live columns in the UI.
+  - A missing column blocks generation (never filter one side only).
+- The spec, with its workbook/sheet/row, goes into
+  `population_scope["scope_filter"]`. It is `{mode: none}` when no row
+  matched.
+
+## Multi-source (UNION) nodes (ADR 0049)
+
+Several `sourceMapping` entries that each start with `FROM` = several Bronze
+sources combined into one Silver table. Each mapping is its own branch
+(`population_scope["union_branches"]`: name, resolved FROM SQL, per-column
+expression from `sources[i]`); `union_strategy` comes from
+`config.insertStrategy` (INSERT/UNION ALL → UNION ALL, UNION → UNION; unknown →
+UNION ALL + review reason). The emitter builds one SELECT per branch, each
+with its own `_FIVETRAN_ACTIVE` filter, joined by the operator; the count is
+`COUNT(*)` over the union. A column missing from any branch is skipped, never
+guessed. Workbook scope filters are not applied to UNION nodes yet. The old
+ADR 0019 shape (first mapping `FROM`, the rest `JOIN` fragments) still
+concatenates. Not yet checked against a real multi-source payload.
+
+## Silver sub-flow UI (`webapp/views/generate_yamls.py`, ADR 0050)
 
 Lives inside `with tab_batch:` ("Generate Batch YAML" tab), gated by a
 top-level `st.radio("Layer", ["Bronze", "Silver"], key="batch_layer_flow")`
@@ -188,7 +207,7 @@ Silver branch (`layer_flow == "Silver"`), session-state keys and call sites:
     (`db_type` = `plan.source_db_type`, reason is the fixed string
     `"Coalesce/live schema drift — excluded via Silver validation UI"`).
   - "Raise Bug" calls the existing `connector.jira_client.create_ticket()`
-    (same function/signature the rest of `app.py` already uses), pre-filled
+    (same function/signature the rest of the UI already uses), pre-filled
     with the column, table, and drift-type.
   - Resolution state tracked in `st.session_state["silver_diff_resolution"]`,
     a `{"{group}:{column}": "excluded"|"bugged"}` dict.

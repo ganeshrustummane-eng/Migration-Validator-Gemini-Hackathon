@@ -105,8 +105,6 @@ class DataValidationBlock(_QueryBlock):
     report_tile: Optional[str] = None
     test_case: Optional[str] = None
     summary: Optional[str] = None
-    sourcecolumn: Optional[str] = None
-    targetcolumn: Optional[str] = None
 
 
 class IntegrityCheckBlock(BaseModel):

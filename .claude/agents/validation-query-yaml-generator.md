@@ -23,7 +23,7 @@ The framework is general-purpose: any condition a test lead describes (filter, j
 
 ## Constraints
 
-- Do not edit `webapp/app.py` UI rendering — expose a small, well-named function/parameter and tell the user exactly what call site the frontend agent needs to add.
+- Do not edit UI rendering (`webapp/`) — expose a small, well-named function/parameter and tell the user exactly what call site the frontend agent needs to add.
 - Any new filter or join must flow through `CanonicalValidationPlan` first, then the SQL generator, then the YAML writer — never hardcode filter/join SQL in only one of the two generators.
 - `source_filter` and `target_filter` must express the *same* logical condition in each dialect (PostgreSQL/MSSQL/Athena/Redshift vs Snowflake). Mismatched filters silently produce wrong validation results (an accuracy/consistency-dimension bug) — call this out explicitly if you can't guarantee equivalence.
 - For large tables (100M+ rows), push filters/joins into SQL (WHERE/JOIN/EXISTS) — never fetch full tables and filter in Python.

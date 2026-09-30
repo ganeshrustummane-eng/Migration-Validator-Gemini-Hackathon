@@ -97,6 +97,17 @@ def _tokenize_env(text: str, *databases: str) -> str:
     return text
 
 
+def config_table_name(plan: "CanonicalValidationPlan", layer: str) -> str:
+    """Name a table's config goes by: the data YAML file name, its `tables:` key
+    and its count_validation key -- the target table name (ADR 0048). Silver
+    is always INT_<table> (e.g. INT_DISCOUNT_LINES) so a Silver config can
+    never be mistaken for a Bronze one. The runner looks the table up by file
+    stem and then by `tables:` key, so all three must agree."""
+    if layer != "silver":
+        return plan.target_table or plan.source_table
+    return "INT_" + re.sub(r"(?i)^int_", "", plan.target_table or plan.source_table)
+
+
 class YAMLConfigWriter:
     """
     Writes YAML validation config files automatically when the pipeline runs.
@@ -129,6 +140,7 @@ class YAMLConfigWriter:
         target_primary_keys: Optional[List[str]] = None,
         plan: Optional["CanonicalValidationPlan"] = None,
         layer: str = "bronze",
+        table_key: str = "",
     ) -> Path:
         """
         Write the data validation YAML for a single table.
@@ -190,6 +202,7 @@ class YAMLConfigWriter:
         yaml_content = _build_data_yaml(
             table_name_source=pg_table,
             table_name_target=sf_table,
+            table_key=table_key or pg_table,
             source_db_type=source_db_type,
             source_database=source_database,
             pg_schema=pg_schema,
@@ -210,35 +223,22 @@ class YAMLConfigWriter:
             model_used=query_set.model_used,
             source_audit_column=source_audit_column,
             target_audit_column=target_audit_column,
-            plan_intent={
-                "population_scope": plan.population_scope,
-                "relationships": [r.to_dict() for r in plan.relationships],
-                "identity": {
-                    "type": plan.identity_type,
-                    "source_primary_keys": plan.source_primary_keys,
-                    "target_primary_keys": plan.target_primary_keys,
-                    "candidate_keys": plan.candidate_keys,
-                },
-                "row_hash": plan.row_hash.to_dict() if plan.row_hash else None,
-                "transformations": [t.to_dict() for t in plan.transformations],
-                "validations": [v.to_dict() for v in plan.validations],
-                "requires_review": plan.requires_review,
-                "review_reasons": plan.review_reasons,
-                "execution_strategy": plan.execution_strategy,
-            } if plan is not None else None,
-            transformation_source_yaml=_prep(query_set.transformation_source),
-            transformation_target_yaml=_prep(query_set.transformation_target),
-            aggregate_source_yaml=_prep(query_set.aggregate_source),
-            aggregate_target_yaml=_prep(query_set.aggregate_target),
-            row_hash_source_yaml=_prep(query_set.row_hash_source),
-            row_hash_target_yaml=_prep(query_set.row_hash_target),
+            plan_intent=_engine_plan_block(plan),
+            row_hash_source_yaml=_prep(query_set.row_hash_source or "SELECT 1;"),
+            row_hash_target_yaml=_prep(query_set.row_hash_target or "SELECT 1;"),
+            layer=layer,
         )
 
         yaml_content = _tokenize_env(yaml_content, source_database, sf_database)
         # A plain scalar starting with "{" is a YAML flow mapping -- quote it.
         yaml_content = re.sub(r"^(\s*\w+_database: )(\{env\}\S*)$", r'\1"\2"', yaml_content, flags=re.M)
 
-        yaml_path = out_dir / f"{pg_table}.yaml"
+        yaml_path = out_dir / f"{table_key or pg_table}.yaml"
+        # Windows paths are case-insensitive: writing UNITS.yaml over an old
+        # units.yaml would keep the old casing, and the runner (file stem ->
+        # tables: key) would then miss the table. Remove it first.
+        if yaml_path.exists():
+            yaml_path.unlink()
         with open(yaml_path, "w", encoding="utf-8") as f:
             f.write(yaml_content)
 
@@ -257,6 +257,7 @@ class YAMLConfigWriter:
         has_fivetran_active: bool = False,
         output_dir: Optional[Path] = None,
         source_database: str = "",
+        table_key: str = "",
     ) -> Path:
         """
         Upsert this table's count_validation block into the shared
@@ -301,8 +302,9 @@ class YAMLConfigWriter:
 
         document = _load_yaml_document(yaml_path)
         tables = document.setdefault("tables", {})
-        action = "updated" if pg_table in tables else "added"
-        tables[pg_table] = block
+        key = table_key or pg_table
+        action = "updated" if key in tables else "added"
+        tables[key] = block
 
         header = [
             "# ============================================================",
@@ -322,7 +324,7 @@ class YAMLConfigWriter:
         ]
         _dump_yaml_document(yaml_path, document, header)
 
-        print(f"  📋 Count YAML {action:<7}: {yaml_path.resolve()}  ({pg_table})")
+        print(f"  📋 Count YAML {action:<7}: {yaml_path.resolve()}  ({key})")
         return yaml_path
 
     def write_count_yaml_from_plan(
@@ -330,6 +332,7 @@ class YAMLConfigWriter:
         plan: "CanonicalValidationPlan",
         query_set: ValidationQuerySet,
         output_dir: Optional[Path] = None,
+        layer: str = "bronze",
     ) -> Path:
         """Write the count-only YAML directly from a CanonicalValidationPlan."""
         return self.write_count_yaml(
@@ -343,6 +346,7 @@ class YAMLConfigWriter:
             sf_table=plan.target_table,
             has_fivetran_active=plan.has_fivetran_active,
             output_dir=output_dir,
+            table_key=config_table_name(plan, layer),
         )
 
     def write_from_plan(
@@ -385,12 +389,36 @@ class YAMLConfigWriter:
             output_dir=output_dir,
             plan=plan,
             layer=layer,
+            table_key=config_table_name(plan, layer),
         )
 
 
 # ---------------------------------------------------------------------------
 # YAML content builder — exact format per project specification
 # ---------------------------------------------------------------------------
+
+def _engine_plan_block(plan: Optional["CanonicalValidationPlan"]) -> Optional[dict]:
+    """The validation_plan keys the engine actually reads (ADR 0048), only
+    when they mean something: execution_strategy + identity for hybrid_v1
+    (Project/main.py, tiered_runner.py, ADR 0037), row_hash columns (hybrid
+    Tier 1 and the PK-less row_hash fallback), transformations (hybrid).
+    Everything else stays in the plan JSON only. None -> no block at all."""
+    if plan is None:
+        return None
+    block: dict = {}
+    if plan.execution_strategy == "hybrid_v1":
+        block["execution_strategy"] = "hybrid_v1"
+        block["identity"] = {
+            "type": plan.identity_type,
+            "source_primary_keys": plan.source_primary_keys,
+            "target_primary_keys": plan.target_primary_keys,
+        }
+    if plan.row_hash:
+        block["row_hash"] = plan.row_hash.to_dict()
+    if plan.transformations:
+        block["transformations"] = [t.to_dict() for t in plan.transformations]
+    return block or None
+
 
 def _pk_yaml_lines(key: str, pk) -> List[str]:
     """
@@ -432,52 +460,20 @@ def _build_data_yaml(
     source_audit_column: str = "",
     target_audit_column: str = "",
     plan_intent: Optional[dict] = None,
-    transformation_source_yaml: str = "",
-    transformation_target_yaml: str = "",
-    aggregate_source_yaml: str = "",
-    aggregate_target_yaml: str = "",
     row_hash_source_yaml: str = "",
     row_hash_target_yaml: str = "",
+    table_key: str = "",
+    layer: str = "bronze",
 ) -> str:
-    fivetran_comment = (
-        "\n#   - Fivetran  : WHERE _FIVETRAN_ACTIVE = TRUE (Snowflake side — active records only)"
-        if has_fivetran_active
-        else ""
-    )
-
     lines = [
-        "# ============================================================",
-        "# Migration Validator — Data Validation Config",
-        f"# Table      : {table_name_source}",
-        f"# Generated  : {generated_at}",
-        f"# By         : {generated_by} (model: {model_used})",
-        f"# Columns    : {column_count} comparable columns",
-        "#",
-        "# Validation blocks (row count is in bronze.yaml):",
-        "#   data_validation           — normalised full-scan SELECT (all columns)",
-        "#",
-        "# Note: null_pct_validation and distinct_count_validation have been",
-        "# removed. Only data_validation and count_validation are used.",
-        "#",
-        "# Normalization rules applied automatically:",
-        "#   - Boolean    : TRUE/FALSE -> '1'/'0'",
-        "#   - Numeric    : ROUND to 2 decimal places, then text",
-        "#   - Timestamp  : 'YYYY-MM-DD HH24:MI:SS'  (microseconds stripped)",
-        "#   - Timestamp_TZ: convert to UTC -> 'YYYY-MM-DD HH24:MI:SS'",
-        "#   - Date       : 'YYYY-MM-DD'",
-        "#   - Text/Char  : TRIM leading/trailing spaces",
-        "#   - UUID       : UPPER(TRIM()) — case-insensitive comparison",
-        "#   - Integer    : CAST to text",
-        "#   - JSON/JSONB : canonical serialization (jsonb::text / TO_JSON)",
-        "#   - Bytea      : hex text encoding",
-        f"#   - NULL       : COALESCE -> '<<NULL>>' sentinel (ALL columns){fivetran_comment}",
-        "# ============================================================",
+        f"# {layer.capitalize()} data validation: {table_key or table_name_source}  "
+        f"({table_name_source} -> {table_name_target}, {column_count} columns compared)",
+        f"# Generated {generated_at} by {generated_by} (model: {model_used}). Keys, exclusions,",
+        "# filters and review notes are in the plan JSON under output/plans/.",
         "",
         "tables:",
-        f"  {table_name_source}:",
+        f"  {table_key or table_name_source}:",
         "    validations:",
-        "",
-        "      # ── ③ / ④ Normalised data validation (all columns) ───────────",
         "      data_validation:",
         f"        source_table_name: {table_name_source}",
         f"        source: {source_db_type}",
@@ -507,40 +503,9 @@ def _build_data_yaml(
             "",
         ])
 
-    if transformation_source_yaml and transformation_target_yaml:
-        lines.extend([
-            "      transformation_validation:",
-            f"        source_table_name: {table_name_source}",
-            f"        source: {source_db_type}",
-            f"        source_database: {source_database}",
-            f"        source_schema: {pg_schema}",
-            "        sourcequery: |", transformation_source_yaml,
-            f"        target_table_name: {table_name_target}",
-            "        target: snowflake",
-            f"        target_database: {sf_database}",
-            f"        target_schema: {sf_schema}",
-            "        targetquery: |", transformation_target_yaml,
-        ])
-    if aggregate_source_yaml and aggregate_target_yaml:
-        lines.extend([
-            "      aggregate_validation:",
-            f"        source_table_name: {table_name_source}",
-            f"        source: {source_db_type}",
-            f"        source_database: {source_database}",
-            f"        source_schema: {pg_schema}",
-            "        sourcequery: |", aggregate_source_yaml,
-            f"        target_table_name: {table_name_target}",
-            "        target: snowflake",
-            f"        target_database: {sf_database}",
-            f"        target_schema: {sf_schema}",
-            "        targetquery: |", aggregate_target_yaml,
-        ])
-
-    # Tier-1 hash query for the large-table hybrid engine (Project/tiered_runner.py)
-    # — only written when the plan configured a row_hash spec (plan.row_hash).
-    # Consumed only when a table's validation_plan.execution_strategy is also
-    # set to hybrid_v1; every other table ignores this block entirely, same as
-    # transformation_validation/aggregate_validation above.
+    # Tier-1 hash query for the large-table hybrid engine (Project/tiered_runner.py).
+    # Always written (ADR 0048); SELECT 1 until the plan has a row_hash spec.
+    # Only used when validation_plan.execution_strategy is hybrid_v1 (ADR 0035).
     if row_hash_source_yaml and row_hash_target_yaml:
         lines.extend([
             "      row_hash_validation:",
